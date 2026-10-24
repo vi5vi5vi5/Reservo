@@ -1,8 +1,8 @@
 namespace Reservo.Application.Auth;
 
 /// <summary>
-/// Claim names inside our JWT. Shared by the code that issues tokens (Infrastructure)
-/// and the code that reads them (API), so the two can never drift apart.
+/// Имена claims внутри нашего JWT. Ими пользуются и код, который выдаёт токены (Infrastructure),
+/// и код, который их читает (API), — поэтому они не могут разойтись.
 /// </summary>
 public static class ClaimNames
 {

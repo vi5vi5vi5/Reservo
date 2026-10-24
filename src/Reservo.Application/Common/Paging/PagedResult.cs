@@ -11,7 +11,7 @@ public sealed record PagedResult<T>(IReadOnlyList<T> Items, int Page, int PageSi
 
 public static class PagingExtensions
 {
-    /// <summary>Runs two SQL queries: COUNT for the total and OFFSET/LIMIT for the requested page.</summary>
+    /// <summary>Выполняет два SQL-запроса: COUNT для общего числа и OFFSET/LIMIT для нужной страницы.</summary>
     public static async Task<PagedResult<T>> ToPagedResultAsync<T>(
         this IQueryable<T> query, PagedQuery paging, CancellationToken cancellationToken)
     {

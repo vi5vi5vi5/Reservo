@@ -10,11 +10,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-reservo}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reservo_dev}
     ports:
-      # Bound to localhost only: the database must never be reachable from outside.
-      # Host port 5433, because 5432 may be taken by a locally installed PostgreSQL.
+      # Только localhost: база никогда не должна быть доступна снаружи.
+      # Порт хоста 5433, потому что 5432 может быть занят локально установленным PostgreSQL.
       - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
-      # postgres:18 images keep data under /var/lib/postgresql (not .../data as in older guides).
+      # Образы postgres:18 хранят данные в /var/lib/postgresql (а не в .../data, как в старых инструкциях).
       - db-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]

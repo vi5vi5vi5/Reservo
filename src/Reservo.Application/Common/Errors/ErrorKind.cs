@@ -1,8 +1,8 @@
 namespace Reservo.Application.Common.Errors;
 
 /// <summary>
-/// What kind of failure an <see cref="AppException"/> is.
-/// The API layer maps it to an HTTP status code, so the Application layer stays free of HTTP details.
+/// Вид ошибки <see cref="AppException"/>.
+/// HTTP-статус по нему выбирает слой API, поэтому слой Application ничего не знает про HTTP.
 /// </summary>
 public enum ErrorKind
 {

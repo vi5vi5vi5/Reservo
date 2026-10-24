@@ -4,12 +4,12 @@ using Reservo.Application.Auth;
 namespace Reservo.Infrastructure.Auth;
 
 /// <summary>
-/// Wraps the ASP.NET Core Identity hasher: PBKDF2 with HMAC-SHA512, a random salt per password
-/// and 100 000 iterations. The salt and parameters are stored inside the hash string itself.
+/// Обёртка над хешером из ASP.NET Core Identity: PBKDF2 с HMAC-SHA512, случайная соль для каждого пароля
+/// и 100 000 итераций. Соль и параметры хранятся прямо внутри строки хеша.
 /// </summary>
 public sealed class PasswordHasher : IPasswordHasher
 {
-    // The Identity hasher is generic over a user type but its default implementation ignores the user.
+    // Хешер из Identity обобщён по типу пользователя, но его стандартная реализация самого пользователя не использует.
     private static readonly PasswordHasher<object> Hasher = new();
     private static readonly object NoUser = new();
 

@@ -4,8 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace Reservo.Api.ErrorHandling;
 
 /// <summary>
-/// Last line of defence: turns any unhandled exception into a 500 ProblemDetails response.
-/// Details go to the log only — the client never sees stack traces.
+/// Последний рубеж: любое необработанное исключение превращается в ответ 500 в формате ProblemDetails.
+/// Подробности уходят только в лог — клиент никогда не видит стектрейс.
 /// </summary>
 internal sealed class GlobalExceptionHandler(
     IProblemDetailsService problemDetailsService,
@@ -13,7 +13,7 @@ internal sealed class GlobalExceptionHandler(
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
-        logger.LogError(exception, "Unhandled exception while processing {Method} {Path}",
+        logger.LogError(exception, "Необработанное исключение при обработке {Method} {Path}",
             httpContext.Request.Method, httpContext.Request.Path);
 
         httpContext.Response.StatusCode = StatusCodes.Status500InternalServerError;

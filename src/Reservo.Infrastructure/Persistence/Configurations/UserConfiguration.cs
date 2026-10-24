@@ -21,7 +21,7 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.Property(u => u.PasswordHash);
 
-        // Stored as text ("User", "Admin") so rows stay readable in the database.
+        // Хранится текстом ("User", "Admin"), чтобы строки в базе оставались читаемыми.
         builder.Property(u => u.Role).HasConversion<string>().HasMaxLength(20);
     }
 }

@@ -2,7 +2,7 @@ using FluentValidation;
 
 namespace Reservo.Application.Common.Paging;
 
-/// <summary>Shared paging rules; list query validators include it.</summary>
+/// <summary>Общие правила пагинации; валидаторы списков подключают их через Include.</summary>
 public sealed class PagedQueryValidator : AbstractValidator<PagedQuery>
 {
     public PagedQueryValidator()

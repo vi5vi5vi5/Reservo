@@ -1,15 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Application layer: use-case services, DTOs, validators, abstractions. -->
+  <!-- Слой приложения: сервисы сценариев, DTO, валидаторы, абстракции. -->
 
   <PropertyGroup>
-    <!-- XML comments on DTOs show up in Swagger. Missing comments are not warnings. -->
+    <!-- XML-комментарии к DTO попадают в Swagger. Отсутствие комментария не считается предупреждением. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Only for DbSet<T> and LINQ async operators; the PostgreSQL provider lives in Infrastructure (PROJECT.md, 8.2). -->
+    <!-- Только ради DbSet<T> и асинхронных LINQ-операторов; провайдер PostgreSQL живёт в Infrastructure (PROJECT.md, 8.2). -->
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="FluentValidation" />
     <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />

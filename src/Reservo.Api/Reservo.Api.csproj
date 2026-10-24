@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <!-- API layer: controllers, SignalR hub, error handling, Swagger. Composes all other layers. -->
+  <!-- Слой API: контроллеры, SignalR-хаб, обработка ошибок, Swagger. Собирает все остальные слои вместе. -->
 
   <PropertyGroup>
-    <!-- XML comments on controllers become endpoint descriptions in Swagger. Missing comments are not warnings. -->
+    <!-- XML-комментарии к контроллерам становятся описаниями эндпоинтов в Swagger. Отсутствие комментария не считается предупреждением. -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
   </PropertyGroup>
@@ -12,7 +12,7 @@
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Serilog.AspNetCore" />
     <PackageReference Include="Swashbuckle.AspNetCore" />
-    <!-- Design-time only: enables `dotnet ef` and Add-Migration in Visual Studio. Not shipped with the app. -->
+    <!-- Нужен только во время разработки: включает `dotnet ef` и Add-Migration в Visual Studio. В приложение не попадает. -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

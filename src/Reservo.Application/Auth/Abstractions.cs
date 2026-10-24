@@ -2,7 +2,7 @@ using Reservo.Domain.Users;
 
 namespace Reservo.Application.Auth;
 
-/// <summary>Hashes and verifies passwords. Plain passwords are never stored.</summary>
+/// <summary>Хеширует и проверяет пароли. Пароли в открытом виде никогда не хранятся.</summary>
 public interface IPasswordHasher
 {
     string Hash(string password);
@@ -10,7 +10,7 @@ public interface IPasswordHasher
     bool Verify(string passwordHash, string password);
 }
 
-/// <summary>Issues signed access tokens (JWT).</summary>
+/// <summary>Выдаёт подписанные access-токены (JWT).</summary>
 public interface ITokenService
 {
     AccessToken CreateAccessToken(User user);
@@ -18,12 +18,12 @@ public interface ITokenService
 
 public sealed record AccessToken(string Token, DateTimeOffset ExpiresAt);
 
-/// <summary>Who is making the current request. Implemented in the API layer from the JWT claims.</summary>
+/// <summary>Кто выполняет текущий запрос. Реализуется в слое API по claims из JWT.</summary>
 public interface ICurrentUser
 {
     bool IsAuthenticated { get; }
 
-    /// <summary>Id of the signed-in user. Throws if the request is anonymous.</summary>
+    /// <summary>Id вошедшего пользователя. Для анонимного запроса выбрасывает исключение.</summary>
     int Id { get; }
 
     bool IsAdmin { get; }

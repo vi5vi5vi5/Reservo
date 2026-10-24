@@ -1,6 +1,6 @@
 namespace Reservo.Application.Common.Paging;
 
-/// <summary>Base class for list queries with pagination.</summary>
+/// <summary>Базовый класс для запросов списков с пагинацией.</summary>
 public abstract class PagedQuery
 {
     public const int DefaultPageSize = 20;
@@ -11,4 +11,11 @@ public abstract class PagedQuery
 
     /// <summary>Размер страницы, от 1 до 100.</summary>
     public int PageSize { get; init; } = DefaultPageSize;
+}
+
+/// <summary>Направление сортировки.</summary>
+public enum SortDirection
+{
+    Asc,
+    Desc,
 }

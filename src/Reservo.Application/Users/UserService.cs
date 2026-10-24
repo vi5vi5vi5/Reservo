@@ -21,8 +21,7 @@ public sealed class UserService(IAppDbContext db, ICurrentUser currentUser) : IU
             .AsNoTracking()
             .SingleOrDefaultAsync(u => u.Id == currentUser.Id, cancellationToken);
 
-        return user?.ToDto()
-            ?? throw new AppException(ErrorKind.NotFound, "not_found", "Пользователь не найден.");
+        return user?.ToDto() ?? throw CommonErrors.NotFound("Пользователь не найден.");
     }
 
     public async Task<PagedResult<UserDto>> GetListAsync(UserListQuery query, CancellationToken cancellationToken)
@@ -45,7 +44,7 @@ public sealed class UserService(IAppDbContext db, ICurrentUser currentUser) : IU
             users = users.Where(u => u.IsActive == isActive);
         }
 
-        // Projecting straight to the DTO means the SQL selects only these columns — never password_hash.
+        // Проекция сразу в DTO: SQL выбирает только эти колонки — password_hash никогда.
         return await users
             .OrderBy(u => u.Id)
             .Select(u => new UserDto(u.Id, u.Email, u.FullName, u.Role, u.IsActive, u.CreatedAt))

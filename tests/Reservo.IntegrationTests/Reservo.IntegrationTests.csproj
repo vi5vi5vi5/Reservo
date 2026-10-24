@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- End-to-end tests: the whole API over HTTP against a real PostgreSQL (Testcontainers). Requires Docker. -->
+  <!-- Сквозные тесты: весь API по HTTP против настоящего PostgreSQL (Testcontainers). Нужен Docker. -->
 
   <PropertyGroup>
-    <!-- xUnit v3 test projects are standalone executables. -->
+    <!-- Тестовые проекты xUnit v3 — самостоятельные исполняемые файлы. -->
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 

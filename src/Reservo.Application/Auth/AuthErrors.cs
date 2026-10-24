@@ -2,7 +2,7 @@ using Reservo.Application.Common.Errors;
 
 namespace Reservo.Application.Auth;
 
-/// <summary>All authentication errors in one place (codes from PROJECT.md, 7.3).</summary>
+/// <summary>Все ошибки аутентификации в одном месте (коды из PROJECT.md, 7.3).</summary>
 public static class AuthErrors
 {
     public static AppException InvalidCredentials() =>

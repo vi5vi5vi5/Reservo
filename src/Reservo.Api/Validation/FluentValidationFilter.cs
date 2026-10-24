@@ -8,16 +8,16 @@ using Microsoft.AspNetCore.Mvc.ModelBinding;
 namespace Reservo.Api.Validation;
 
 /// <summary>
-/// Runs the FluentValidation validator (if one exists) for every action argument before the action executes.
-/// Invalid input never reaches controllers or services: the client gets 400 with the list of problems per field,
-/// in the same format as ASP.NET Core's built-in model validation.
+/// Перед выполнением действия контроллера запускает валидатор FluentValidation (если он есть) для каждого аргумента.
+/// Некорректные данные не доходят ни до контроллеров, ни до сервисов: клиент получает 400 со списком проблем
+/// по каждому полю — в том же формате, что и встроенная валидация ASP.NET Core.
 /// </summary>
 internal sealed class FluentValidationFilter(ProblemDetailsFactory problemDetailsFactory) : IAsyncActionFilter
 {
     public async Task OnActionExecutionAsync(ActionExecutingContext context, ActionExecutionDelegate next)
     {
-        // A fresh dictionary rather than context.ModelState: model binding has already registered keys
-        // like "Page" there, and the case-insensitive lookup would keep that casing instead of "page".
+        // Отдельный словарь, а не context.ModelState: привязка модели уже завела там ключи вроде "Page",
+        // и поиск без учёта регистра сохранил бы это написание вместо "page".
         var errors = new ModelStateDictionary();
 
         foreach (var argument in context.ActionArguments.Values)
@@ -37,7 +37,7 @@ internal sealed class FluentValidationFilter(ProblemDetailsFactory problemDetail
 
             foreach (var failure in result.Errors)
             {
-                // Field names in camelCase, exactly as they appear in the JSON or query string the client sent.
+                // Имена полей в camelCase — ровно как в JSON или строке запроса, которые прислал клиент.
                 errors.AddModelError(JsonNamingPolicy.CamelCase.ConvertName(failure.PropertyName), failure.ErrorMessage);
             }
         }

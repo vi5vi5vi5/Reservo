@@ -5,8 +5,8 @@ using Reservo.Application.Common.Errors;
 namespace Reservo.Api.ErrorHandling;
 
 /// <summary>
-/// Turns expected business errors (<see cref="AppException"/>) into ProblemDetails with the right status code.
-/// Anything else falls through to <see cref="GlobalExceptionHandler"/>.
+/// Превращает ожидаемые бизнес-ошибки (<see cref="AppException"/>) в ProblemDetails с нужным HTTP-статусом.
+/// Всё остальное достаётся <see cref="GlobalExceptionHandler"/>.
 /// </summary>
 internal sealed class AppExceptionHandler(
     IProblemDetailsService problemDetailsService,
@@ -19,8 +19,8 @@ internal sealed class AppExceptionHandler(
             return false;
         }
 
-        // Business errors are normal behaviour, not failures of the app: Information, not Error.
-        logger.LogInformation("Request rejected with {Code}: {Message}", error.Code, error.Message);
+        // Бизнес-ошибка — нормальное поведение, а не сбой приложения: уровень Information, а не Error.
+        logger.LogInformation("Запрос отклонён: {Code} — {Message}", error.Code, error.Message);
 
         var status = error.Kind switch
         {

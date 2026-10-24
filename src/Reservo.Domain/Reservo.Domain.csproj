@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Domain layer: entities, enums, business rules, booking state machine.
-    Must not reference any other project or infrastructure package.
+    Доменный слой: сущности, перечисления, бизнес-правила, стейт-машина броней.
+    Не ссылается ни на другие проекты, ни на инфраструктурные пакеты.
   -->
 
 </Project>

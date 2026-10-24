@@ -1,8 +1,8 @@
 namespace Reservo.Application.Common.Errors;
 
 /// <summary>
-/// An expected business error, e.g. "email already taken" or "time slot is busy".
-/// <see cref="Code"/> is machine-readable for the frontend, the message is shown to people.
+/// Ожидаемая бизнес-ошибка, например «email уже занят» или «слот занят».
+/// <see cref="Code"/> машиночитаемый — для фронтенда, сообщение — для людей.
 /// </summary>
 public sealed class AppException(ErrorKind kind, string code, string message) : Exception(message)
 {

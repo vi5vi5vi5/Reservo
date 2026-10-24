@@ -1,6 +1,6 @@
 namespace Reservo.Api.Auth;
 
-/// <summary>Authorization policy names used in [Authorize(Policy = ...)].</summary>
+/// <summary>Имена политик авторизации для [Authorize(Policy = ...)].</summary>
 public static class Policies
 {
     public const string Admin = "Admin";

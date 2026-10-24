@@ -1,8 +1,8 @@
 <Project>
 
   <!--
-    Central Package Management: every NuGet package version lives here.
-    Project files reference packages without a Version attribute.
+    Централизованное управление пакетами: версии всех NuGet-пакетов хранятся здесь.
+    В файлах проектов пакеты указываются без атрибута Version.
   -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>

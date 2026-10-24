@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Fast isolated tests: business rules, state machine, validators. No database. -->
+  <!-- Быстрые изолированные тесты: бизнес-правила, стейт-машина, валидаторы. Без базы данных. -->
 
   <PropertyGroup>
-    <!-- xUnit v3 test projects are standalone executables. -->
+    <!-- Тестовые проекты xUnit v3 — самостоятельные исполняемые файлы. -->
     <OutputType>Exe</OutputType>
   </PropertyGroup>
 

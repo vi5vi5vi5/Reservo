@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.WebUtilities;
 namespace Reservo.Api.ErrorHandling;
 
 /// <summary>
-/// Every error response is RFC 9457 ProblemDetails with a machine-readable "code" (PROJECT.md, 7.1).
+/// Любой ответ с ошибкой — это ProblemDetails (RFC 9457) с машиночитаемым полем "code" (PROJECT.md, 7.1).
 /// </summary>
 internal static class ProblemDetailsSetup
 {
@@ -23,15 +23,15 @@ internal static class ProblemDetailsSetup
                      && problem.Title == ReasonPhrases.GetReasonPhrase(status)
                      && DefaultTitle(status) is { } russianTitle)
             {
-                // Framework-generated responses ("Unauthorized", "Not Found") get a Russian title like our own errors.
+                // Ответы, которые сформировал сам фреймворк ("Unauthorized", "Not Found"), получают русский заголовок, как и наши ошибки.
                 problem.Title = russianTitle;
             }
 
-            // Responses without an explicit code (e.g. 404 for an unknown URL) get a default one by status.
+            // Ответы без явного кода (например, 404 на неизвестный адрес) получают код по умолчанию по статусу.
             problem.Extensions.TryAdd(CodeKey, DefaultCode(problem.Status));
         });
 
-        // Handlers run in registration order: business errors first, then the catch-all.
+        // Обработчики вызываются в порядке регистрации: сначала бизнес-ошибки, затем «ловушка» для всего остального.
         services.AddExceptionHandler<AppExceptionHandler>();
         services.AddExceptionHandler<GlobalExceptionHandler>();
 

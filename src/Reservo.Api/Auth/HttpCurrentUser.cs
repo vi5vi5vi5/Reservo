@@ -5,7 +5,7 @@ using Reservo.Domain.Users;
 
 namespace Reservo.Api.Auth;
 
-/// <summary>Reads the current user from the validated JWT of the HTTP request.</summary>
+/// <summary>Достаёт текущего пользователя из проверенного JWT HTTP-запроса.</summary>
 internal sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
 {
     private ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
@@ -15,7 +15,7 @@ internal sealed class HttpCurrentUser(IHttpContextAccessor httpContextAccessor) 
     public int Id =>
         int.TryParse(Principal?.FindFirstValue(ClaimNames.UserId), NumberStyles.None, CultureInfo.InvariantCulture, out var id)
             ? id
-            : throw new InvalidOperationException("The current request has no authenticated user.");
+            : throw new InvalidOperationException("В текущем запросе нет вошедшего пользователя.");
 
     public bool IsAdmin => Principal?.IsInRole(nameof(UserRole.Admin)) == true;
 }

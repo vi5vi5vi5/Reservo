@@ -26,7 +26,7 @@ public class LoginRequestValidatorTests
     [Fact]
     public void Password_rules_are_not_checked_on_login()
     {
-        // A weak password must still get "invalid credentials", not a hint about password rules.
+        // Слабый пароль всё равно должен получать «неверный email или пароль», а не подсказку о правилах пароля.
         _validator.TestValidate(new LoginRequest("student@reservo.example", "1"))
             .ShouldNotHaveValidationErrorFor(x => x.Password);
     }

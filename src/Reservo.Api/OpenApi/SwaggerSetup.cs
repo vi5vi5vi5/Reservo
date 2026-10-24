@@ -17,13 +17,13 @@ internal static class SwaggerSetup
                 Description = "Бронирование аудиторий, лабораторий, переговорных и оборудования.",
             });
 
-            // Descriptions of endpoints and DTO fields come from /// XML comments in the code.
+            // Описания эндпоинтов и полей DTO берутся из XML-комментариев /// в коде.
             foreach (var xmlFile in new[] { "Reservo.Api.xml", "Reservo.Application.xml" })
             {
                 options.IncludeXmlComments(Path.Combine(AppContext.BaseDirectory, xmlFile));
             }
 
-            // Adds the "Authorize" button: paste the access token once, Swagger sends it with every request.
+            // Кнопка "Authorize": токен вставляется один раз, и Swagger отправляет его с каждым запросом.
             options.AddSecurityDefinition(BearerScheme, new OpenApiSecurityScheme
             {
                 Type = SecuritySchemeType.Http,

@@ -3,19 +3,19 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Reservo.Infrastructure.Auth;
 
-/// <summary>JWT settings from the "Jwt" configuration section.</summary>
+/// <summary>Настройки JWT из секции "Jwt" конфигурации.</summary>
 public sealed class JwtOptions
 {
     public const string SectionName = "Jwt";
 
-    /// <summary>HMAC-SHA256 needs a key of at least 256 bits.</summary>
+    /// <summary>Для HMAC-SHA256 нужен ключ не короче 256 бит.</summary>
     public const int MinKeyBytes = 32;
 
     public string Issuer { get; init; } = string.Empty;
 
     public string Audience { get; init; } = string.Empty;
 
-    /// <summary>Signing secret. Never commit a real one: on a server it comes from the Jwt__Key environment variable.</summary>
+    /// <summary>Секрет для подписи. Настоящий ключ в Git не попадает: на сервере он приходит из переменной окружения Jwt__Key.</summary>
     public string Key { get; init; } = string.Empty;
 
     public int AccessTokenMinutes { get; init; } = 30;

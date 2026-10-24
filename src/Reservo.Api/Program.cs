@@ -8,8 +8,8 @@ using Reservo.Infrastructure;
 using Reservo.Infrastructure.Persistence;
 using Serilog;
 
-// A minimal console logger that works even before configuration is loaded,
-// so startup failures (e.g. database unreachable) still get logged.
+// Минимальный логгер в консоль, который работает ещё до загрузки конфигурации:
+// так в лог попадают даже ошибки запуска (например, недоступная база).
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateBootstrapLogger();
@@ -18,7 +18,7 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
-    // The real logger: sinks and levels come from the "Serilog" section of appsettings.
+    // Основной логгер: куда писать и какие уровни — из секции "Serilog" в appsettings.
     builder.Services.AddSerilog((services, logger) => logger
         .ReadFrom.Configuration(builder.Configuration)
         .ReadFrom.Services(services)
@@ -32,11 +32,19 @@ try
         .AddControllers(options =>
         {
             options.Filters.Add<FluentValidationFilter>();
-            // Required fields are checked by FluentValidation (with Russian messages), not by MVC's implicit [Required].
+            // Обязательность полей проверяет FluentValidation (с русскими сообщениями), а не неявный [Required] из MVC.
             options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+            options.UseRussianModelBindingMessages();
         })
-        // Enums travel as text: "role": "Admin", not "role": 1.
-        .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+        .AddJsonOptions(options =>
+        {
+            // Перечисления передаются текстом: "role": "Admin", а не "role": 1.
+            options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+            // Не показываем клиенту внутренние сообщения парсера JSON с именами типов .NET.
+            options.AllowInputFormatterExceptionMessages = false;
+        })
+        .ConfigureApiBehaviorOptions(options =>
+            options.InvalidModelStateResponseFactory = ModelBindingSetup.CreateInvalidModelStateResponse);
 
     builder.Services.AddReservoProblemDetails();
     builder.Services.AddReservoSwagger();
@@ -52,12 +60,13 @@ try
 
     await app.Services.InitializeDatabaseAsync();
 
-    // First in the pipeline, so it logs the final status code — after error handlers have turned exceptions into 4xx.
+    // Первым в конвейере, чтобы логировать итоговый статус — уже после того,
+    // как обработчики ошибок превратили исключения в ответы 4xx.
     app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
     app.UseStatusCodePages();
 
-    // Swagger stays on in every environment: it is the demo tool for the project defence.
+    // Swagger включён в любом окружении: это инструмент демонстрации на защите.
     app.UseSwagger();
     app.UseSwaggerUI(options =>
     {
@@ -77,8 +86,8 @@ try
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {
-    // HostAbortedException is thrown on purpose by `dotnet ef` tooling and is not a real failure.
-    Log.Fatal(ex, "Application terminated unexpectedly");
+    // HostAbortedException намеренно выбрасывает инструмент `dotnet ef`, это не настоящая ошибка.
+    Log.Fatal(ex, "Приложение аварийно завершило работу");
 }
 finally
 {

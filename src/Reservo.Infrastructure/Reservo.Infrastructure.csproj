@@ -1,15 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Infrastructure layer: EF Core and PostgreSQL, JWT, background jobs. Implements Application abstractions. -->
+  <!-- Инфраструктурный слой: EF Core и PostgreSQL, JWT, фоновые задачи. Реализует абстракции слоя Application. -->
 
   <ItemGroup>
-    <!-- ASP.NET Core shared framework: password hasher, options, hosting. -->
+    <!-- Общий фреймворк ASP.NET Core: хешер паролей, options, хостинг. -->
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="EFCore.NamingConventions" />
-    <!-- Brings Microsoft.IdentityModel.JsonWebTokens in the same version the API uses to validate tokens. -->
+    <!-- Подтягивает Microsoft.IdentityModel.JsonWebTokens той же версии, которой API проверяет токены. -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" />

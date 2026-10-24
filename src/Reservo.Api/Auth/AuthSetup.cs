@@ -14,13 +14,13 @@ internal static class AuthSetup
     {
         services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme).AddJwtBearer();
 
-        // Token validation uses the same JwtOptions the tokens were signed with.
+        // Токены проверяются теми же JwtOptions, которыми они были подписаны.
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IOptions<JwtOptions>>((bearer, jwtOptions) =>
             {
                 var jwt = jwtOptions.Value;
 
-                // Keep claim names exactly as in the token ("sub", "role"), without legacy renaming.
+                // Оставляем имена claims как в токене ("sub", "role"), без устаревшего переименования.
                 bearer.MapInboundClaims = false;
                 bearer.TokenValidationParameters = new TokenValidationParameters
                 {
@@ -35,7 +35,7 @@ internal static class AuthSetup
             });
 
         services.AddAuthorizationBuilder()
-            // Secure by default: every endpoint requires a signed-in user unless it is marked [AllowAnonymous].
+            // Всё закрыто по умолчанию: любой эндпоинт требует входа, если он не помечен [AllowAnonymous].
             .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build())
             .AddPolicy(Policies.Admin, policy => policy.RequireRole(nameof(UserRole.Admin)));
 

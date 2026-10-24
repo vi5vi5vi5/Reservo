@@ -24,8 +24,8 @@ public sealed class AuthService(
     {
         var email = User.NormalizeEmail(request.Email);
 
-        // Friendly check first. The unique index on users.email is the last line of defence
-        // if two identical registrations arrive at the same moment.
+        // Сначала дружелюбная проверка. Уникальный индекс на users.email — последний рубеж,
+        // если две одинаковые регистрации придут в один и тот же момент.
         if (await db.Users.AnyAsync(u => u.Email == email, cancellationToken))
         {
             throw AuthErrors.EmailTaken();
@@ -41,7 +41,7 @@ public sealed class AuthService(
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("User {UserId} registered", user.Id);
+        logger.LogInformation("Зарегистрирован пользователь {UserId}", user.Id);
 
         return CreateResponse(user);
     }
@@ -51,7 +51,7 @@ public sealed class AuthService(
         var email = User.NormalizeEmail(request.Email);
         var user = await db.Users.SingleOrDefaultAsync(u => u.Email == email, cancellationToken);
 
-        // Same error for "no such user" and "wrong password": we don't reveal which emails are registered.
+        // Одна и та же ошибка для «нет такого пользователя» и «неверный пароль»: не раскрываем, какие email зарегистрированы.
         if (user is null || !passwordHasher.Verify(user.PasswordHash, request.Password))
         {
             throw AuthErrors.InvalidCredentials();
@@ -62,7 +62,7 @@ public sealed class AuthService(
             throw AuthErrors.UserBlocked();
         }
 
-        logger.LogInformation("User {UserId} signed in", user.Id);
+        logger.LogInformation("Пользователь {UserId} вошёл в систему", user.Id);
 
         return CreateResponse(user);
     }
