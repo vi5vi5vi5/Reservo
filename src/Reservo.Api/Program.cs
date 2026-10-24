@@ -76,7 +76,18 @@ try
         options.EnablePersistAuthorization();
     });
 
-    app.UseHttpsRedirection();
+    // Локально Kestrel слушает и HTTP, и HTTPS. В Docker приложение слушает только HTTP,
+    // а HTTPS обеспечивает обратный прокси перед контейнером, поэтому перенаправлять там некуда.
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseHttpsRedirection();
+    }
+
+    // Статические файлы из wwwroot (демо-страница живых обновлений /demo/). Стоят до авторизации,
+    // поэтому открыты всем: это обычные публичные файлы, данные страница получает через API по токену.
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
+
     app.UseCors();
     app.UseAuthentication();
     app.UseAuthorization();
@@ -84,6 +95,9 @@ try
     app.MapControllers();
     app.MapHub<LiveHub>(RealtimeSetup.HubPath);
     app.MapHealthChecks("/health").AllowAnonymous();
+
+    // Корень сайта ведёт в Swagger: на демо-стенде достаточно открыть адрес сервера.
+    app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous().ExcludeFromDescription();
 
     await app.RunAsync();
 }

@@ -1,5 +1,13 @@
 name: reservo
 
+# Журналы контейнеров (docker logs) без ограничения растут бесконечно и могут заполнить диск сервера.
+# Здесь каждый контейнер хранит не больше трёх файлов по 10 МБ.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     image: postgres:18-alpine
@@ -21,6 +29,47 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  api:
+    # На сервере образ скачивается готовым из GitHub Container Registry (его собирает GitHub Actions).
+    # Локально `docker compose up -d --build` собирает его из Dockerfile под тем же именем.
+    image: ghcr.io/vi5vi5vi5/reservo-api:${API_TAG:-latest}
+    build: .
+    container_name: reservo-api
+    restart: unless-stopped
+    depends_on:
+      # API стартует, только когда база уже принимает подключения: иначе миграции при запуске упадут.
+      db:
+        condition: service_healthy
+    environment:
+      # Внутри сети Compose база доступна по имени сервиса db и своему порту 5432.
+      # Gss Encryption Mode=Disable: Kerberos не используется, а без этого Npgsql при подключении ищет
+      # библиотеку libgssapi_krb5, которой нет в образе, и пишет ошибку в лог.
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-reservo};Username=${POSTGRES_USER:-reservo};Password=${POSTGRES_PASSWORD:-reservo_dev};Gss Encryption Mode=Disable"
+      # Секреты приходят только из .env. Без JWT_KEY приложение откажется стартовать.
+      Jwt__Key: ${JWT_KEY:-}
+      Seed__Admin__Password: ${ADMIN_PASSWORD:-}
+      Seed__DemoUserPassword: ${DEMO_USER_PASSWORD:-}
+      # Часовой пояс контейнера влияет только на время в логах: приложение хранит и сравнивает время в UTC.
+      TZ: Europe/Moscow
+    ports:
+      # По умолчанию API доступен только с этой машины. Чтобы открыть его снаружи по ip:port,
+      # в .env задаётся API_BIND=0.0.0.0. Когда появится обратный прокси с HTTPS, снова вернём 127.0.0.1.
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8080}:8080"
+    volumes:
+      # Файловые логи Serilog переживают пересоздание контейнера при обновлении образа.
+      - api-logs:/app/logs
+    logging: *logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   db-data:
+  api-logs:

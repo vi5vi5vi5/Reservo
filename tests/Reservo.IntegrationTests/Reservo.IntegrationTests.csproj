@@ -5,11 +5,24 @@
   <PropertyGroup>
     <!-- Тестовые проекты xUnit v3 — самостоятельные исполняемые файлы. -->
     <OutputType>Exe</OutputType>
+    <!--
+      xUnit1051 просит передавать токен отмены теста в каждый вызов. Тесты короткие, а токен в каждом
+      HTTP-запросе только мешал бы читать сценарий, поэтому правило отключено.
+    -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="coverlet.collector" />
+    <!-- WebApplicationFactory: запускает API целиком в памяти теста, без реального порта. -->
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <!-- Клиент SignalR: проверяем, что живые уведомления действительно приходят. -->
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <!-- FakeTimeProvider: «часы», которые тест двигает сам, — для фоновой задачи. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <!-- Одноразовый PostgreSQL в Docker на время тестов. -->
+    <PackageReference Include="Testcontainers.PostgreSql" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>

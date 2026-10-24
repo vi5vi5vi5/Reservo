@@ -1,0 +1,81 @@
+# Непрерывная интеграция: на каждый push и pull request решение собирается и проходит все тесты,
+# включая интеграционные с настоящим PostgreSQL в Docker (на раннерах GitHub Docker уже установлен).
+# После зелёных тестов в main собирается Docker-образ API и публикуется в GitHub Container Registry,
+# откуда его скачивает сервер.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Новый push в ту же ветку отменяет ещё не закончившийся прогон: проверять устаревший код незачем.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# По умолчанию — только чтение репозитория. Право публиковать образ выдаётся отдельно задаче publish.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Сборка и тесты
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore Reservo.slnx
+
+      - name: Build
+        run: dotnet build Reservo.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test Reservo.slnx --configuration Release --no-build
+
+  publish:
+    name: Docker-образ в GHCR
+    needs: test
+    # Образ публикуется только из main, не из pull request.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Вход в GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Два тега: latest (его берёт сервер по умолчанию) и sha-<коммит> — чтобы можно было откатиться на любую сборку.
+      - name: Теги образа
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/reservo-api
+          tags: |
+            type=raw,value=latest
+            type=sha
+
+      - name: Сборка и публикация
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Кэш слоёв между прогонами: если зависимости не менялись, restore не выполняется заново.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

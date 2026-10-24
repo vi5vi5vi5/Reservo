@@ -1,0 +1,683 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reservo · живые обновления</title>
+<!--
+  Демо-страница для защиты: показывает живые обновления через SignalR без фронтенда.
+  Откройте её в двух окнах и войдите разными пользователями: бронь в одном окне сразу появляется в расписании другого,
+  а действия администратора приходят пользователю уведомлением. Вход хранится в sessionStorage — у каждой вкладки свой.
+-->
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1d2330; --muted: #677085; --line: #e3e6ec;
+    --accent: #4b5bd6; --accent-soft: #e9ecfc; --busy: #eceef2; --busy-text: #4a5163;
+    --pending: #b7791f; --pending-soft: #fdf4e3; --danger: #c43d3d; --danger-soft: #fdecec;
+    --ok: #2f855a; --ok-soft: #e6f4ec; --shadow: 0 1px 2px rgba(20, 24, 40, .06), 0 4px 16px rgba(20, 24, 40, .04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12141a; --card: #1a1d25; --text: #e6e8ee; --muted: #9aa1b3; --line: #2b2f3a;
+      --accent: #8b97ff; --accent-soft: #262b4a; --busy: #262a35; --busy-text: #c3c8d6;
+      --pending: #e0a84a; --pending-soft: #3a2f1c; --danger: #f07878; --danger-soft: #3d2222;
+      --ok: #6fcf97; --ok-soft: #1d3428; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  [hidden] { display: none !important; }
+
+  header {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--card);
+  }
+  .brand { font-weight: 650; letter-spacing: -.01em; }
+  .brand span { color: var(--muted); font-weight: 400; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px;
+    font-size: 13px; background: var(--busy); color: var(--busy-text);
+  }
+  .pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .pill.online { background: var(--ok-soft); color: var(--ok); }
+  .pill.reconnecting { background: var(--pending-soft); color: var(--pending); }
+  .pill.offline { background: var(--danger-soft); color: var(--danger); }
+  .who { color: var(--muted); font-size: 14px; }
+
+  main { max-width: 1120px; margin: 0 auto; padding: 20px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); padding: 18px; }
+  .card + .card { margin-top: 20px; }
+  h2 { font-size: 16px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+
+  .btn {
+    border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 7px 12px; cursor: pointer;
+  }
+  .btn:hover { border-color: var(--muted); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.small { padding: 3px 8px; font-size: 13px; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  input, select { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; }
+  .row > label { flex: 1 1 140px; }
+
+  .login { max-width: 400px; margin: 48px auto; }
+  .login form { display: grid; gap: 12px; }
+
+  .message { margin-top: 12px; padding: 9px 12px; border-radius: 8px; font-size: 14px; }
+  .message.error { background: var(--danger-soft); color: var(--danger); }
+  .message.success { background: var(--ok-soft); color: var(--ok); }
+
+  /* Расписание: 1 минута = 1 пиксель, слева подписи часов. */
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .toolbar select { flex: 1 1 220px; }
+  .timeline-wrap { max-height: 540px; overflow-y: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .timeline { position: relative; margin-left: 56px; cursor: crosshair; }
+  .hour { position: absolute; left: -56px; right: 0; border-top: 1px solid var(--line); }
+  .hour span { position: absolute; left: 8px; top: -1px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .slot {
+    position: absolute; left: 6px; right: 6px; border-radius: 7px; padding: 3px 8px; overflow: hidden;
+    font-size: 12.5px; line-height: 1.3; background: var(--busy); color: var(--busy-text);
+    border-left: 3px solid var(--muted); cursor: default; display: flex; gap: 8px; align-items: start;
+  }
+  .slot .text { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slot.mine { background: var(--accent-soft); color: var(--text); border-left-color: var(--accent); }
+  .slot.pending { border-left-style: dashed; border-left-color: var(--pending); }
+  .slot.fresh { animation: appear 1.6s ease-out; }
+  @keyframes appear {
+    0% { transform: scale(.96); box-shadow: 0 0 0 3px var(--accent); opacity: .3; }
+    40% { transform: scale(1); opacity: 1; }
+    100% { box-shadow: 0 0 0 0 transparent; }
+  }
+  .now { position: absolute; left: -6px; right: 0; border-top: 2px solid var(--danger); pointer-events: none; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; background: var(--busy); border-left: 3px solid var(--muted); }
+  .legend i.mine { background: var(--accent-soft); border-left-color: var(--accent); }
+  .legend i.pending { border-left: 3px dashed var(--pending); }
+
+  .badge { min-width: 22px; padding: 1px 7px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; text-align: center; }
+  .badge.zero { background: var(--busy); color: var(--muted); }
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+  .note { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+  .note.unread { border-color: var(--accent); background: var(--accent-soft); }
+  .note.fresh { animation: slide .5s ease-out; }
+  @keyframes slide { from { transform: translateY(-6px); opacity: 0; } to { transform: none; opacity: 1; } }
+  .note b { display: block; font-size: 14px; }
+  .note p { margin: 2px 0 0; font-size: 13.5px; }
+  .note time { font-size: 12px; color: var(--muted); }
+  .empty { color: var(--muted); font-size: 14px; padding: 6px 0; }
+
+  .log { font: 12px/1.5 ui-monospace, SFMono-Regular, Consolas, monospace; max-height: 220px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+  .log li { padding: 3px 0; border-bottom: 1px dashed var(--line); word-break: break-word; }
+  .log .ev { color: var(--accent); font-weight: 600; }
+  .log time { color: var(--muted); margin-right: 6px; }
+
+  .toast {
+    position: fixed; right: 20px; bottom: 20px; max-width: 340px; background: var(--text); color: var(--bg);
+    padding: 12px 14px; border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, .25); font-size: 14px;
+    transition: opacity .3s, transform .3s;
+  }
+  .toast.hide { opacity: 0; transform: translateY(8px); pointer-events: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Reservo <span>· живые обновления</span></div>
+  <div class="spacer"></div>
+  <span id="status" class="pill offline" role="status">Не подключено</span>
+  <span id="who" class="who"></span>
+  <button id="logout" class="btn small" hidden>Выйти</button>
+</header>
+
+<main>
+  <!-- Вход -->
+  <section id="login-view" class="card login" hidden>
+    <h2>Вход</h2>
+    <p class="hint">Откройте страницу в двух окнах и войдите разными пользователями — бронь в одном окне сразу появится в другом.</p>
+    <form id="login-form">
+      <label>Email
+        <input id="email" type="email" list="demo-emails" autocomplete="username" required value="student@reservo.example">
+        <datalist id="demo-emails">
+          <option value="student@reservo.example">
+          <option value="student2@reservo.example">
+          <option value="teacher@reservo.example">
+          <option value="admin@reservo.example">
+        </datalist>
+      </label>
+      <label>Пароль
+        <input id="password" type="password" autocomplete="current-password" required>
+      </label>
+      <button class="btn primary" type="submit">Войти</button>
+      <div id="login-message" class="message error" hidden></div>
+    </form>
+  </section>
+
+  <!-- Основной экран -->
+  <div id="app-view" class="grid" hidden>
+    <div>
+      <section class="card">
+        <h2>Расписание</h2>
+        <div class="toolbar">
+          <select id="resource" aria-label="Ресурс"></select>
+          <button id="prev-day" class="btn" aria-label="Предыдущий день">‹</button>
+          <input id="date" type="date" aria-label="Дата">
+          <button id="next-day" class="btn" aria-label="Следующий день">›</button>
+        </div>
+        <div class="timeline-wrap"><div id="timeline" class="timeline"></div></div>
+        <div class="legend">
+          <span><i class="mine"></i>Моя бронь</span>
+          <span><i></i>Занято</span>
+          <span><i class="pending"></i>На согласовании</span>
+          <span>Щелчок по свободному месту подставит время начала</span>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Быстрая бронь</h2>
+        <form id="booking-form">
+          <div class="row">
+            <label>Начало <select id="start"></select></label>
+            <label>Длительность <select id="duration"></select></label>
+            <label>Участников <input id="attendees" type="number" min="1" placeholder="—"></label>
+          </div>
+          <div class="row" style="margin-top: 10px">
+            <label>Тема <input id="title" maxlength="200" value="Встреча по проекту" required></label>
+            <button class="btn primary" type="submit">Забронировать</button>
+          </div>
+        </form>
+        <div id="booking-message" class="message" hidden></div>
+      </section>
+    </div>
+
+    <div>
+      <section class="card">
+        <h2>Уведомления <span id="unread" class="badge zero">0</span>
+          <span class="spacer"></span>
+          <button id="read-all" class="btn small">Прочитать все</button>
+        </h2>
+        <ul id="notifications" class="list"></ul>
+      </section>
+
+      <section class="card">
+        <h2>События SignalR</h2>
+        <ul id="log" class="log"></ul>
+      </section>
+    </div>
+  </div>
+</main>
+
+<div id="toast" class="toast hide" role="status" aria-live="polite"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@microsoft/signalr@10.0.11/dist/browser/signalr.min.js"
+        integrity="sha384-N+pL/4qXZHZcvsa6hVMd5/7cdF3lC59ZMNHeQyRo5q9jmC7yw0hcJILPjUDSU7ZS"
+        crossorigin="anonymous"></script>
+<script>
+"use strict";
+
+const $ = id => document.getElementById(id);
+const SESSION_KEY = "reservo-demo-session";
+const STATUS_TEXT = { Pending: "На согласовании", Confirmed: "Подтверждена", Completed: "Завершена" };
+
+const state = {
+  session: null,          // { accessToken, refreshToken, user }
+  connection: null,       // подключение к хабу SignalR
+  resources: [],
+  resourceId: null,       // ресурс, на который подписаны
+  timeZone: "Europe/Moscow",
+  schedule: null,
+  unread: 0,
+};
+
+// ---------- API ----------
+
+async function api(method, url, body) {
+  const headers = { "Content-Type": "application/json" };
+  if (state.session) headers.Authorization = `Bearer ${state.session.accessToken}`;
+
+  const response = await fetch(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+
+  if (response.status === 401 && state.session) {
+    await signOut("Сессия истекла, войдите снова.");
+    throw new Error("Сессия истекла");
+  }
+  if (response.status === 204) return null;
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new Error(describeProblem(data, response.status));
+  return data;
+}
+
+// Ошибки API приходят в формате ProblemDetails: title, detail и, для валидации, errors по полям.
+function describeProblem(problem, status) {
+  if (!problem) return `Ошибка ${status}`;
+  const fieldErrors = problem.errors ? Object.values(problem.errors).flat() : [];
+  return [problem.detail || problem.title, ...fieldErrors].filter(Boolean).join(" ");
+}
+
+// ---------- Время площадки ----------
+
+// Смещение часового пояса площадки от UTC в минутах для заданного момента.
+function offsetMinutes(date, timeZone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+    timeZone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(date).map(p => [p.type, p.value]));
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second);
+  return Math.round((asUtc - date.getTime()) / 60000);
+}
+
+const pad = n => String(n).padStart(2, "0");
+const hhmm = minutes => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+const toMinutes = time => { const [h, m] = time.split(":").map(Number); return h * 60 + m; };
+
+// Местные дата и время площадки → строка ISO 8601 со смещением, например 2026-10-25T14:00:00+03:00.
+function localIso(date, minutes) {
+  const offset = offsetMinutes(new Date(`${date}T12:00:00Z`), state.timeZone);
+  const sign = offset >= 0 ? "+" : "-";
+  return `${date}T${hhmm(minutes)}:00${sign}${hhmm(Math.abs(offset))}`;
+}
+
+// Момент времени → минуты от полуночи по местному времени площадки.
+function localMinutes(iso) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: state.timeZone, hourCycle: "h23", hour: "2-digit", minute: "2-digit" })
+    .formatToParts(new Date(iso));
+  const get = type => Number(parts.find(p => p.type === type).value);
+  return get("hour") * 60 + get("minute");
+}
+
+function localDateString(date) {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: state.timeZone }).format(date);
+}
+
+function shiftDate(date, days) {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+const formatTime = iso => new Intl.DateTimeFormat("ru-RU", {
+  timeZone: state.timeZone, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+}).format(new Date(iso));
+
+// ---------- Вход и выход ----------
+
+async function signIn(email, password) {
+  state.session = null;
+  const auth = await api("POST", "/api/auth/login", { email, password });
+  state.session = { accessToken: auth.accessToken, refreshToken: auth.refreshToken, user: auth.user };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(state.session));
+  await startApp();
+}
+
+async function signOut(message) {
+  const session = state.session;
+  state.session = null;
+  sessionStorage.removeItem(SESSION_KEY);
+  if (state.connection) await state.connection.stop().catch(() => {});
+  state.connection = null;
+  state.resourceId = null;
+
+  // Отзываем refresh-токен на сервере; ошибка здесь не важна — локально мы уже вышли.
+  if (session && !message) {
+    fetch("/api/auth/logout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.accessToken}` },
+      body: JSON.stringify({ refreshToken: session.refreshToken }),
+    }).catch(() => {});
+  }
+  showLogin(message);
+}
+
+function showLogin(message) {
+  $("app-view").hidden = true;
+  $("logout").hidden = true;
+  $("who").textContent = "";
+  $("login-view").hidden = false;
+  setStatus("offline");
+  showMessage($("login-message"), message, "error");
+}
+
+// ---------- SignalR ----------
+
+async function connect() {
+  const connection = new signalR.HubConnectionBuilder()
+    // Браузер не умеет передавать заголовок Authorization при открытии WebSocket,
+    // поэтому клиент SignalR кладёт токен в параметр access_token — сервер читает его оттуда.
+    .withUrl("/hubs/live", { accessTokenFactory: () => state.session?.accessToken ?? "" })
+    .withAutomaticReconnect()
+    .build();
+
+  connection.on("notificationReceived", notification => {
+    log("notificationReceived", notification);
+    addNotification(notification, true);
+    toast(`${notification.title}. ${notification.message}`);
+  });
+
+  connection.on("scheduleChanged", event => {
+    log("scheduleChanged", event);
+    if (event.resourceId === state.resourceId) loadSchedule(true);
+  });
+
+  connection.onreconnecting(() => setStatus("reconnecting"));
+  connection.onreconnected(async () => {
+    setStatus("online");
+    // После переподключения это новое соединение: подписку на ресурс нужно оформить заново.
+    if (state.resourceId) await connection.invoke("SubscribeToResource", state.resourceId);
+    loadSchedule(true);
+  });
+  connection.onclose(() => setStatus("offline"));
+
+  state.connection = connection;
+  await connection.start();
+  setStatus("online");
+}
+
+async function subscribe(resourceId) {
+  const connection = state.connection;
+  if (connection?.state !== signalR.HubConnectionState.Connected) return;
+  if (state.resourceId && state.resourceId !== resourceId) {
+    await connection.invoke("UnsubscribeFromResource", state.resourceId);
+  }
+  await connection.invoke("SubscribeToResource", resourceId);
+  log("SubscribeToResource", { resourceId });
+}
+
+function setStatus(status) {
+  const pill = $("status");
+  pill.className = `pill ${status}`;
+  pill.textContent = { online: "Подключено", reconnecting: "Переподключение…", offline: "Не подключено" }[status];
+}
+
+// ---------- Расписание ----------
+
+const PX_PER_MINUTE = 1;
+
+async function loadSchedule(highlightNew) {
+  const resourceId = Number($("resource").value);
+  const date = $("date").value;
+  if (!resourceId || !date) return;
+
+  const from = encodeURIComponent(localIso(date, 0));
+  const to = encodeURIComponent(localIso(shiftDate(date, 1), 0));
+  const previous = state.schedule?.resourceId === resourceId ? state.schedule : null;
+  const schedule = await api("GET", `/api/resources/${resourceId}/schedule?from=${from}&to=${to}`);
+
+  state.timeZone = schedule.timeZone;
+  state.schedule = schedule;
+  renderSchedule(schedule, highlightNew ? previous : null);
+  fillStartOptions(schedule);
+}
+
+function renderSchedule(schedule, previous) {
+  const timeline = $("timeline");
+  const open = toMinutes(schedule.openTime);
+  const close = toMinutes(schedule.closeTime);
+  timeline.style.height = `${(close - open) * PX_PER_MINUTE}px`;
+  timeline.replaceChildren();
+
+  for (let m = Math.ceil(open / 60) * 60; m < close; m += 60) {
+    const line = document.createElement("div");
+    line.className = "hour";
+    line.style.top = `${(m - open) * PX_PER_MINUTE}px`;
+    line.innerHTML = `<span>${hhmm(m)}</span>`;
+    timeline.append(line);
+  }
+
+  const key = item => `${item.startAt}|${item.endAt}|${item.status}`;
+  const known = new Set(previous?.items.map(key) ?? []);
+
+  for (const item of schedule.items) {
+    const start = Math.max(localMinutes(item.startAt), open);
+    const end = Math.min(localMinutes(item.endAt) || 24 * 60, close);
+    if (end <= start) continue;
+
+    const slot = document.createElement("div");
+    slot.className = "slot";
+    if (item.isMine) slot.classList.add("mine");
+    if (item.status === "Pending") slot.classList.add("pending");
+    if (previous && !known.has(key(item))) slot.classList.add("fresh");
+    slot.style.top = `${(start - open) * PX_PER_MINUTE}px`;
+    slot.style.height = `${Math.max((end - start) * PX_PER_MINUTE - 2, 12)}px`;
+
+    // BR-17: у чужих броней сервер не присылает тему и владельца — показываем просто «Занято».
+    const who = item.title ? `${item.title}${item.ownerName && !item.isMine ? ` · ${item.ownerName}` : ""}` : "Занято";
+    const text = document.createElement("div");
+    text.className = "text";
+    text.textContent = `${hhmm(start)}–${hhmm(end)} · ${who} · ${STATUS_TEXT[item.status] ?? item.status}`;
+    text.title = text.textContent;
+    slot.append(text);
+
+    if (item.isMine && item.status !== "Completed" && new Date(item.startAt) > new Date()) {
+      const cancel = document.createElement("button");
+      cancel.className = "btn small";
+      cancel.textContent = "Отменить";
+      cancel.addEventListener("click", event => { event.stopPropagation(); cancelBooking(item.bookingId); });
+      slot.append(cancel);
+    }
+    slot.addEventListener("click", event => event.stopPropagation());
+    timeline.append(slot);
+  }
+
+  if ($("date").value === localDateString(new Date())) {
+    const now = localMinutes(new Date().toISOString());
+    if (now > open && now < close) {
+      const line = document.createElement("div");
+      line.className = "now";
+      line.style.top = `${(now - open) * PX_PER_MINUTE}px`;
+      timeline.append(line);
+    }
+  }
+}
+
+function fillStartOptions(schedule) {
+  const select = $("start");
+  const current = select.value;
+  const open = toMinutes(schedule.openTime);
+  const close = toMinutes(schedule.closeTime);
+  select.replaceChildren();
+  for (let m = open; m < close; m += 15) select.add(new Option(hhmm(m), hhmm(m)));
+  if ([...select.options].some(o => o.value === current)) select.value = current;
+}
+
+// Щелчок по свободному месту на шкале подставляет время начала с шагом 15 минут.
+$("timeline").addEventListener("click", event => {
+  if (!state.schedule) return;
+  const rect = $("timeline").getBoundingClientRect();
+  const minutes = toMinutes(state.schedule.openTime) + Math.floor((event.clientY - rect.top) / PX_PER_MINUTE / 15) * 15;
+  if ([...$("start").options].some(o => o.value === hhmm(minutes))) {
+    $("start").value = hhmm(minutes);
+    $("title").focus();
+  }
+});
+
+async function selectResource() {
+  const resourceId = Number($("resource").value);
+  try {
+    await subscribe(resourceId);
+    state.resourceId = resourceId;
+    await loadSchedule(false);
+  } catch (error) {
+    showMessage($("booking-message"), error.message, "error");
+  }
+}
+
+// ---------- Бронирование ----------
+
+$("booking-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  const date = $("date").value;
+  const start = toMinutes($("start").value);
+  const end = start + Number($("duration").value);
+  const attendees = $("attendees").value ? Number($("attendees").value) : null;
+
+  try {
+    const booking = await api("POST", "/api/bookings", {
+      resourceId: Number($("resource").value),
+      startAt: localIso(date, start),
+      endAt: end >= 24 * 60 ? localIso(shiftDate(date, 1), end - 24 * 60) : localIso(date, end),
+      title: $("title").value,
+      attendees,
+    });
+    showMessage($("booking-message"), `Бронь создана: ${formatTime(booking.startAt)}, статус «${STATUS_TEXT[booking.status]}».`, "success");
+    await loadSchedule(true);
+  } catch (error) {
+    showMessage($("booking-message"), error.message, "error");
+  }
+});
+
+async function cancelBooking(bookingId) {
+  try {
+    await api("POST", `/api/bookings/${bookingId}/cancel`);
+    showMessage($("booking-message"), "Бронь отменена.", "success");
+    await loadSchedule(true);
+  } catch (error) {
+    showMessage($("booking-message"), error.message, "error");
+  }
+}
+
+// ---------- Уведомления ----------
+
+async function loadNotifications() {
+  const [page, unread] = await Promise.all([
+    api("GET", "/api/notifications?pageSize=20"),
+    api("GET", "/api/notifications/unread-count"),
+  ]);
+  $("notifications").replaceChildren();
+  for (const notification of page.items.slice().reverse()) addNotification(notification, false);
+  setUnread(unread.count);
+  if (page.items.length === 0) showEmptyNotifications();
+}
+
+function showEmptyNotifications() {
+  $("notifications").innerHTML = `<li class="empty">Уведомлений пока нет. Они появятся здесь без перезагрузки страницы.</li>`;
+}
+
+function addNotification(notification, isNew) {
+  const list = $("notifications");
+  list.querySelector(".empty")?.remove();
+
+  const item = document.createElement("li");
+  item.className = "note";
+  if (!notification.isRead) item.classList.add("unread");
+  if (isNew) item.classList.add("fresh");
+  item.innerHTML = `<b></b><p></p><time></time>`;
+  item.querySelector("b").textContent = notification.title;
+  item.querySelector("p").textContent = notification.message;
+  item.querySelector("time").textContent = formatTime(notification.createdAt);
+  item.addEventListener("click", () => markRead(notification, item));
+  list.prepend(item);
+
+  if (isNew && !notification.isRead) setUnread(state.unread + 1);
+}
+
+async function markRead(notification, item) {
+  if (notification.isRead) return;
+  await api("POST", `/api/notifications/${notification.id}/read`);
+  notification.isRead = true;
+  item.classList.remove("unread");
+  setUnread(state.unread - 1);
+}
+
+$("read-all").addEventListener("click", async () => {
+  await api("POST", "/api/notifications/read-all");
+  document.querySelectorAll(".note.unread").forEach(n => n.classList.remove("unread"));
+  setUnread(0);
+});
+
+function setUnread(count) {
+  state.unread = Math.max(count, 0);
+  $("unread").textContent = state.unread;
+  $("unread").classList.toggle("zero", state.unread === 0);
+}
+
+// ---------- Мелочи интерфейса ----------
+
+function showMessage(element, text, kind) {
+  element.hidden = !text;
+  element.textContent = text ?? "";
+  element.className = `message ${kind}`;
+}
+
+function log(event, payload) {
+  const item = document.createElement("li");
+  const time = new Date().toLocaleTimeString("ru-RU");
+  item.innerHTML = `<time>${time}</time><span class="ev"></span> <span class="payload"></span>`;
+  item.querySelector(".ev").textContent = event;
+  item.querySelector(".payload").textContent = JSON.stringify(payload);
+  $("log").prepend(item);
+  while ($("log").children.length > 40) $("log").lastChild.remove();
+}
+
+let toastTimer;
+function toast(text) {
+  const element = $("toast");
+  element.textContent = text;
+  element.classList.remove("hide");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => element.classList.add("hide"), 5000);
+}
+
+// ---------- Запуск ----------
+
+async function startApp() {
+  $("login-view").hidden = true;
+  $("app-view").hidden = false;
+  $("logout").hidden = false;
+  const user = state.session.user;
+  $("who").textContent = `${user.fullName}${user.role === "Admin" ? " · администратор" : ""}`;
+
+  const page = await api("GET", "/api/resources?pageSize=100&sortBy=name");
+  state.resources = page.items;
+  $("resource").replaceChildren(...page.items.map(r =>
+    new Option(`${r.name} · ${r.location.name}${r.capacity ? ` · до ${r.capacity} чел.` : ""}${r.requiresApproval ? " · с согласованием" : ""}`, r.id)));
+  const preferred = page.items.find(r => r.name.includes("Байкал")) ?? page.items[0];
+  if (preferred) $("resource").value = preferred.id;
+
+  // По умолчанию — завтра: сегодняшний день к вечеру уже почти весь в прошлом.
+  $("date").value = shiftDate(localDateString(new Date()), 1);
+
+  await connect();
+  await Promise.all([selectResource(), loadNotifications()]);
+}
+
+for (const minutes of [15, 30, 45, 60, 90, 120, 180, 240]) {
+  const label = minutes < 60 ? `${minutes} мин` : `${Math.floor(minutes / 60)} ч${minutes % 60 ? ` ${minutes % 60} мин` : ""}`;
+  $("duration").add(new Option(label, minutes));
+}
+$("duration").value = "60";
+
+$("resource").addEventListener("change", selectResource);
+$("date").addEventListener("change", () => loadSchedule(false).catch(e => showMessage($("booking-message"), e.message, "error")));
+$("prev-day").addEventListener("click", () => { $("date").value = shiftDate($("date").value, -1); loadSchedule(false); });
+$("next-day").addEventListener("click", () => { $("date").value = shiftDate($("date").value, 1); loadSchedule(false); });
+$("logout").addEventListener("click", () => signOut());
+
+$("login-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  showMessage($("login-message"), null, "error");
+  try {
+    await signIn($("email").value, $("password").value);
+  } catch (error) {
+    if (state.session) toast(error.message);
+    else showLogin(error.message);
+  }
+});
+
+// Вход сохраняется в sessionStorage: после обновления страницы входить заново не нужно.
+try { state.session = JSON.parse(sessionStorage.getItem(SESSION_KEY)); } catch { state.session = null; }
+if (state.session) startApp().catch(error => showLogin(error.message));
+else showLogin();
+</script>
+</body>
+</html>

@@ -67,7 +67,10 @@ public sealed class BookingService(
             // 1. Правила, которым не нужна база (BR-02–BR-08).
             BookingRules.CheckSlot(startAt, endAt, request.Attendees, resource, policy, now).ThrowIfViolated();
 
-            // 2. Правила, которым нужны другие брони (BR-09–BR-11).
+            // 2. Очередь на ресурс: одновременные брони этого ресурса дальше идут по одной, и каждая видит предыдущие.
+            await db.LockResourceForBookingAsync(resource.Id, ct);
+
+            // 3. Правила, которым нужны другие брони (BR-09–BR-11).
             await EnsureNoOverlapsAsync(resource, userId, startAt, endAt, exceptBookingId: 0, ct);
 
             var activeBookings = await ActiveBookings().CountAsync(b => b.UserId == userId && b.StartAt > now, ct);
@@ -76,8 +79,8 @@ public sealed class BookingService(
             var booking = new Booking(resource.Id, userId, startAt, endAt, request.Title, request.Attendees, resource.RequiresApproval, now);
             db.Bookings.Add(booking);
 
-            // 3. Если параллельный запрос успел занять то же время между проверкой и сохранением,
-            //    exclusion constraint в базе не даст записать пересечение, и клиент получит 409 (ConstraintErrors).
+            // 4. Последний рубеж: даже если пересечение как-то прошло мимо кода (ошибка в коде, запись в базу в обход API),
+            //    exclusion constraint не даст его записать, и клиент получит 409 (ConstraintErrors).
             await db.SaveChangesAsync(ct);
 
             db.AuditLogs.Add(AuditEntries.ForBooking(userId, AuditAction.BookingCreated, booking.Id, new
@@ -116,46 +119,55 @@ public sealed class BookingService(
         var startAt = request.StartAt!.Value.ToUniversalTime();
         var endAt = request.EndAt!.Value.ToUniversalTime();
 
-        var booking = await db.Bookings
-            .Include(b => b.Resource)
-            .SingleOrDefaultAsync(b => b.Id == id, cancellationToken);
-
-        EnsureCanSee(booking);
-
-        // BR-12: менять бронь может только владелец. Администратор её видит, но может только отменить.
-        if (booking.UserId != currentUser.Id)
+        // Перенос тоже меняет занятость ресурса, поэтому идёт в транзакции с той же очередью на ресурс, что и создание.
+        var (booking, notifications, statusBefore) = await db.ExecuteInTransactionAsync(async ct =>
         {
-            throw BookingErrors.OnlyOwnerCanModify();
-        }
+            var booking = await db.Bookings
+                .Include(b => b.Resource)
+                .SingleOrDefaultAsync(b => b.Id == id, ct);
 
-        BookingRules.CheckCanModify(booking, now).ThrowIfViolated();
-        BookingRules.CheckSlot(startAt, endAt, request.Attendees, booking.Resource, policy, now).ThrowIfViolated();
+            EnsureCanSee(booking);
 
-        // Сама бронь из проверки пересечений исключается: она не конфликтует сама с собой.
-        // Лимит броней не проверяем — их число от изменения не меняется.
-        await EnsureNoOverlapsAsync(booking.Resource, booking.UserId, startAt, endAt, exceptBookingId: booking.Id, cancellationToken);
+            // BR-12: менять бронь может только владелец. Администратор её видит, но может только отменить.
+            if (booking.UserId != currentUser.Id)
+            {
+                throw BookingErrors.OnlyOwnerCanModify();
+            }
 
-        var before = new { booking.StartAt, booking.EndAt, booking.Title, booking.Attendees, booking.Status };
-        booking.Update(startAt, endAt, request.Title, request.Attendees, booking.Resource.RequiresApproval, now);
+            BookingRules.CheckCanModify(booking, now).ThrowIfViolated();
+            BookingRules.CheckSlot(startAt, endAt, request.Attendees, booking.Resource, policy, now).ThrowIfViolated();
 
-        db.AuditLogs.Add(AuditEntries.ForBooking(currentUser.Id, AuditAction.BookingUpdated, booking.Id, AuditEntries.Changes(
-            ("startAt", before.StartAt, booking.StartAt),
-            ("endAt", before.EndAt, booking.EndAt),
-            ("title", before.Title, booking.Title),
-            ("attendees", before.Attendees, booking.Attendees),
-            ("status", before.Status, booking.Status)), now));
+            await db.LockResourceForBookingAsync(booking.ResourceId, ct);
 
-        // Перенесённая бронь, которая ждёт согласования, снова попадает в очередь администраторов (PROJECT.md, 5.5).
-        var timeChanged = before.StartAt != booking.StartAt || before.EndAt != booking.EndAt;
-        var notifications = timeChanged && booking.Status == BookingStatus.Pending
-            ? await PendingApprovalNotificationsAsync(booking, booking.Resource.Name, now, cancellationToken)
-            : [];
+            // Сама бронь из проверки пересечений исключается: она не конфликтует сама с собой.
+            // Лимит броней не проверяем — их число от изменения не меняется.
+            await EnsureNoOverlapsAsync(booking.Resource, booking.UserId, startAt, endAt, exceptBookingId: booking.Id, ct);
 
-        db.Notifications.AddRange(notifications);
-        await db.SaveChangesAsync(cancellationToken);
+            var before = new { booking.StartAt, booking.EndAt, booking.Title, booking.Attendees, booking.Status };
+            booking.Update(startAt, endAt, request.Title, request.Attendees, booking.Resource.RequiresApproval, now);
+
+            db.AuditLogs.Add(AuditEntries.ForBooking(currentUser.Id, AuditAction.BookingUpdated, booking.Id, AuditEntries.Changes(
+                ("startAt", before.StartAt, booking.StartAt),
+                ("endAt", before.EndAt, booking.EndAt),
+                ("title", before.Title, booking.Title),
+                ("attendees", before.Attendees, booking.Attendees),
+                ("status", before.Status, booking.Status)), now));
+
+            // Перенесённая бронь, которая ждёт согласования, снова попадает в очередь администраторов (PROJECT.md, 5.5).
+            var timeChanged = before.StartAt != booking.StartAt || before.EndAt != booking.EndAt;
+            var notifications = timeChanged && booking.Status == BookingStatus.Pending
+                ? await PendingApprovalNotificationsAsync(booking, booking.Resource.Name, now, ct)
+                : [];
+
+            db.Notifications.AddRange(notifications);
+            await db.SaveChangesAsync(ct);
+
+            return (booking, notifications, before.Status);
+        }, cancellationToken);
+
         await PublishAsync(notifications, booking.ResourceId, cancellationToken);
 
-        logger.LogInformation("Изменена бронь {BookingId}, статус {StatusBefore} → {StatusAfter}", id, before.Status, booking.Status);
+        logger.LogInformation("Изменена бронь {BookingId}, статус {StatusBefore} → {StatusAfter}", id, statusBefore, booking.Status);
         return await LoadAsync(id, cancellationToken);
     }
 

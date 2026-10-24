@@ -59,6 +59,21 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         });
     }
 
+    /// <summary>Пространство ключей advisory lock для бронирований, чтобы не пересечься с другими блокировками.</summary>
+    private const int BookingLockSpace = 1;
+
+    public async Task LockResourceForBookingAsync(int resourceId, CancellationToken cancellationToken)
+    {
+        if (Database.CurrentTransaction is null)
+        {
+            throw new InvalidOperationException("Блокировку ресурса можно взять только внутри транзакции: иначе она сразу освободится.");
+        }
+
+        // pg_advisory_xact_lock — «блокировка по договорённости»: PostgreSQL не связывает её с таблицей,
+        // а просто не выдаёт один и тот же ключ двум транзакциям сразу. Снимается автоматически при коммите или откате.
+        await Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({BookingLockSpace}, {resourceId})", cancellationToken);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // btree_gist позволяет одному GiST-индексу сочетать «resource_id =» и «интервалы пересекаются».

@@ -1,0 +1,158 @@
+### Reservo — сценарий демонстрации на защите
+#
+# Запросы выполняются по порядку сверху вниз: кнопка «Отправить запрос» над каждым запросом в Visual Studio.
+# Окружение (адрес и пароли) выбирается в правом верхнем углу редактора, значения лежат в http-client.env.json:
+#   local  — API из Visual Studio (F5), пароли демо-аккаунтов из appsettings.Development.json;
+#   docker — API в Docker на этой машине; server — демо-стенд.
+# Пароли для docker и server не хранятся в Git: задайте их в http-client.env.json.user рядом с этим файлом
+# (тот же формат, Git его игнорирует).
+#
+# Все брони — на завтра по времени площадки (Москва, +03:00). Запросы на ресурсы ссылаются на id из демо-каталога:
+# 1 — переговорная «Байкал», 3 — переговорная «Онега», 9 — лаборатория робототехники (с согласованием);
+# оснащение 1 — проектор, категория 1 — переговорные.
+# В конце сценария всё возвращается как было, поэтому его можно повторить.
+
+### 0. API и база живы
+GET {{host}}/health
+
+
+### 1. Студент входит в систему
+# @name student
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "student@reservo.example",
+  "password": "{{demoPassword}}"
+}
+
+
+### 2. Справочники для фильтров: id проектора и категории «Переговорные»
+GET {{host}}/api/features
+
+
+### 3. Поиск: переговорная на 8 человек с проектором, завтра 14:00–15:30
+# «+» в адресе пишется как %2B, иначе сервер прочитает его как пробел.
+# «Байкал» завтра в 14:00 уже занят, поэтому найдётся «Онега».
+GET {{host}}/api/resources/available?categoryId=1&minCapacity=8&featureIds=1&from={{$localDatetime "yyyy-MM-dd" 1 d}}T14:00:00%2B03:00&to={{$localDatetime "yyyy-MM-dd" 1 d}}T15:30:00%2B03:00
+Authorization: Bearer {{student.response.body.$.accessToken}}
+
+
+### 4. Бронирование «Онеги» → 201 Created
+# @name booking
+POST {{host}}/api/bookings
+Authorization: Bearer {{student.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "resourceId": 3,
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T14:00:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T15:30:00+03:00",
+  "title": "Подготовка к защите",
+  "attendees": 8
+}
+
+
+### 5. Другой пользователь пытается занять тот же слот
+# @name student2
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "student2@reservo.example",
+  "password": "{{demoPassword}}"
+}
+
+### 5а. → 409 booking.time_conflict с понятным объяснением
+POST {{host}}/api/bookings
+Authorization: Bearer {{student2.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "resourceId": 3,
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T14:30:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T15:00:00+03:00",
+  "title": "Встреча клуба"
+}
+
+
+### 6. Студент переносит бронь на час позже
+PUT {{host}}/api/bookings/{{booking.response.body.$.id}}
+Authorization: Bearer {{student.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T15:00:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T16:30:00+03:00",
+  "title": "Подготовка к защите",
+  "attendees": 8
+}
+
+### 6а. История брони: создание и перенос со старым и новым временем
+GET {{host}}/api/bookings/{{booking.response.body.$.id}}/history
+Authorization: Bearer {{student.response.body.$.accessToken}}
+
+
+### 7. Лаборатория робототехники требует согласования → статус Pending
+# @name labBooking
+POST {{host}}/api/bookings
+Authorization: Bearer {{student.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "resourceId": 9,
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T12:00:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T13:30:00+03:00",
+  "title": "Сборка манипулятора",
+  "attendees": 3
+}
+
+### 7а. Администратор входит
+# @name admin
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@reservo.example",
+  "password": "{{adminPassword}}"
+}
+
+### 7б. Очередь заявок на согласование
+GET {{host}}/api/admin/bookings?status=Pending
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 7в. Администратор одобряет заявку
+POST {{host}}/api/admin/bookings/{{labBooking.response.body.$.id}}/approve
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 7г. У студента появилось уведомление «Бронь одобрена»
+GET {{host}}/api/notifications?unreadOnly=true
+Authorization: Bearer {{student.response.body.$.accessToken}}
+
+
+### 8. Администратор выводит «Онегу» из эксплуатации: её будущие брони отменяются
+POST {{host}}/api/resources/3/deactivate
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "reason": "Ремонт проектора"
+}
+
+### 8а. Бронь студента отменена с причиной, уведомление уже пришло
+GET {{host}}/api/bookings/{{booking.response.body.$.id}}
+Authorization: Bearer {{student.response.body.$.accessToken}}
+
+
+### 9. Журнал операций за демо: кто, что и когда сделал
+GET {{host}}/api/admin/audit?pageSize=20
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+
+### 10. Уборка после демо: «Онега» снова в строю, заявка в лабораторию отменена
+POST {{host}}/api/resources/3/activate
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+###
+POST {{host}}/api/bookings/{{labBooking.response.body.$.id}}/cancel
+Authorization: Bearer {{student.response.body.$.accessToken}}

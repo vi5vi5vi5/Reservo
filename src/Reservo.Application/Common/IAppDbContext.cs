@@ -43,4 +43,15 @@ public interface IAppDbContext
     /// должно происходить внутри неё.
     /// </remarks>
     Task<T> ExecuteInTransactionAsync<T>(Func<CancellationToken, Task<T>> operation, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Ставит текущую транзакцию в очередь на бронирование ресурса: пока она не завершится, другие транзакции,
+    /// которые бронируют тот же ресурс, ждут. Вызывается только внутри <see cref="ExecuteInTransactionAsync{T}"/>.
+    /// </summary>
+    /// <remarks>
+    /// Без очереди одновременные брони одного ресурса проходят проверку в коде вместе, а потом exclusion constraint
+    /// заставляет их ждать друг друга — и PostgreSQL прерывает их как взаимоблокировку. С очередью следующая бронь
+    /// видит предыдущую уже сохранённой, и проверка в коде честно отвечает «занято». Брони разных ресурсов не мешают друг другу.
+    /// </remarks>
+    Task LockResourceForBookingAsync(int resourceId, CancellationToken cancellationToken);
 }

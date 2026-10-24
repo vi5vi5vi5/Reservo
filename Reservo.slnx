@@ -1,13 +1,23 @@
 <Solution>
   <Folder Name="/Solution Items/">
+    <File Path=".dockerignore" />
     <File Path=".editorconfig" />
     <File Path=".env.example" />
     <File Path=".gitignore" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
     <File Path="docker-compose.yml" />
+    <File Path="Dockerfile" />
     <File Path="dotnet-tools.json" />
     <File Path="README.md" />
+  </Folder>
+  <Folder Name="/Solution Items/.github/">
+    <File Path=".github/workflows/ci.yml" />
+  </Folder>
+  <Folder Name="/requests/">
+    <File Path="requests/api-tour.http" />
+    <File Path="requests/demo.http" />
+    <File Path="requests/http-client.env.json" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Reservo.Api/Reservo.Api.csproj" />

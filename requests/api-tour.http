@@ -1,0 +1,188 @@
+### Reservo — обзор остальных возможностей API
+#
+# Дополняет demo.http: регистрация и сессии, ошибки доступа и валидации, каталог, расписание,
+# уведомления и управление пользователями. Окружение и пароли — те же (см. начало demo.http).
+# Запросы выполняются по порядку сверху вниз; каждый прогон регистрирует нового пользователя.
+
+### 1. Регистрация → 201 Created, сразу выдаются токены
+# @name newUser
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "user{{$randomInt 100000 999999}}@reservo.example",
+  "password": "Passw0rd123",
+  "fullName": "Ольга Новикова"
+}
+
+### 2. Профиль текущего пользователя
+GET {{host}}/api/users/me
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+
+
+### Ошибки доступа и валидации
+
+### 3. Без токена → 401 unauthorized
+GET {{host}}/api/bookings/my
+
+### 4. Обычный пользователь на админском эндпоинте → 403 forbidden
+GET {{host}}/api/admin/users
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+
+### 5. Слабый пароль → 400 validation_failed с ошибками по полям
+POST {{host}}/api/auth/register
+Content-Type: application/json
+
+{
+  "email": "not-an-email",
+  "password": "short",
+  "fullName": ""
+}
+
+
+### Каталог и расписание (доступны и без входа)
+
+### 6. Лаборатории по убыванию вместимости, первая страница
+GET {{host}}/api/resources?categoryId=3&sortBy=capacity&sortDir=desc&page=1&pageSize=5
+
+### 7. Карточка ресурса
+GET {{host}}/api/resources/1
+
+### 8. Расписание «Байкала» на завтра. Гость видит чужие брони только как занятое время (BR-17)
+GET {{host}}/api/resources/1/schedule?from={{$localDatetime "yyyy-MM-dd" 1 d}}T00:00:00%2B03:00&to={{$localDatetime "yyyy-MM-dd" 2 d}}T00:00:00%2B03:00
+
+
+### Бронирование: правила
+
+### 9. Время не на сетке 15 минут → 400 booking.invalid_time_grid
+POST {{host}}/api/bookings
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "resourceId": 2,
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T09:10:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T10:00:00+03:00",
+  "title": "Интервью"
+}
+
+### 10. Вне рабочих часов (ресурс работает до 21:00) → 400 booking.outside_working_hours
+POST {{host}}/api/bookings
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "resourceId": 2,
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T20:30:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T21:30:00+03:00",
+  "title": "Интервью"
+}
+
+### 11. Корректная бронь «Ладоги» → 201
+# @name myBooking
+POST {{host}}/api/bookings
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+Content-Type: application/json
+
+{
+  "resourceId": 2,
+  "startAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T09:00:00+03:00",
+  "endAt": "{{$localDatetime "yyyy-MM-dd" 1 d}}T10:00:00+03:00",
+  "title": "Интервью",
+  "attendees": 2
+}
+
+### 12. Мои брони: только подтверждённые
+GET {{host}}/api/bookings/my?status=Confirmed
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+
+### 13. Чужая бронь для обычного пользователя → 404: существование чужих броней не раскрывается
+# @name student
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "student@reservo.example",
+  "password": "{{demoPassword}}"
+}
+
+###
+GET {{host}}/api/bookings/{{myBooking.response.body.$.id}}
+Authorization: Bearer {{student.response.body.$.accessToken}}
+
+
+### Уведомления
+
+### 14. Счётчик непрочитанных
+GET {{host}}/api/notifications/unread-count
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+
+### 15. Отметить всё прочитанным → 204
+POST {{host}}/api/notifications/read-all
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
+
+
+### Сессии: refresh-токены
+
+### 16. Обмен refresh-токена на новую пару (старый токен при этом отзывается)
+# @name refreshed
+POST {{host}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{newUser.response.body.$.refreshToken}}"
+}
+
+### 17. Повторное использование старого refresh-токена → 401: похоже на кражу, все сессии пользователя отзываются
+POST {{host}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{newUser.response.body.$.refreshToken}}"
+}
+
+### 18. Поэтому и свежий токен из шага 16 больше не действует → 401
+POST {{host}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshed.response.body.$.refreshToken}}"
+}
+
+
+### Администратор: пользователи
+
+### 19. Вход администратора
+# @name admin
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "admin@reservo.example",
+  "password": "{{adminPassword}}"
+}
+
+### 20. Список пользователей с поиском
+GET {{host}}/api/admin/users?search=reservo.example&pageSize=10
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 21. Блокировка пользователя: в ответе профиль с isActive = false, его refresh-токены отозваны
+POST {{host}}/api/admin/users/{{newUser.response.body.$.user.id}}/block
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 22. Заблокированный не может войти → 403 auth.user_blocked
+POST {{host}}/api/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{newUser.response.body.$.user.email}}",
+  "password": "Passw0rd123"
+}
+
+### 23. Разблокировка
+POST {{host}}/api/admin/users/{{newUser.response.body.$.user.id}}/unblock
+Authorization: Bearer {{admin.response.body.$.accessToken}}
+
+### 24. Уборка: отменяем бронь из шага 11, чтобы файл можно было прогнать снова
+POST {{host}}/api/bookings/{{myBooking.response.body.$.id}}/cancel
+Authorization: Bearer {{newUser.response.body.$.accessToken}}
