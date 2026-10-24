@@ -23,6 +23,90 @@ namespace Reservo.Infrastructure.Persistence.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "btree_gist");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Reservo.Domain.Bookings.Booking", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("Attendees")
+                        .HasColumnType("integer")
+                        .HasColumnName("attendees");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset>("EndAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("end_at");
+
+                    b.Property<DateTimeOffset?>("ReminderSentAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("reminder_sent_at");
+
+                    b.Property<int>("ResourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("resource_id");
+
+                    b.Property<DateTimeOffset>("StartAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("start_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("StatusReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("status_reason");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("title");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.Property<uint>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bookings");
+
+                    b.HasIndex("ResourceId", "StartAt")
+                        .HasDatabaseName("ix_bookings_resource_id_start_at");
+
+                    b.HasIndex("Status", "StartAt")
+                        .HasDatabaseName("ix_bookings_status_start_at");
+
+                    b.HasIndex("UserId", "StartAt")
+                        .HasDatabaseName("ix_bookings_user_id_start_at");
+
+                    b.ToTable("bookings", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_bookings_attendees_positive", "attendees IS NULL OR attendees > 0");
+
+                            t.HasCheckConstraint("ck_bookings_end_after_start", "end_at > start_at");
+                        });
+                });
+
             modelBuilder.Entity("Reservo.Domain.Catalog.Category", b =>
                 {
                     b.Property<int>("Id")
@@ -287,6 +371,27 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_resource_features_feature_id");
 
                     b.ToTable("resource_features", (string)null);
+                });
+
+            modelBuilder.Entity("Reservo.Domain.Bookings.Booking", b =>
+                {
+                    b.HasOne("Reservo.Domain.Catalog.Resource", "Resource")
+                        .WithMany()
+                        .HasForeignKey("ResourceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_resources_resource_id");
+
+                    b.HasOne("Reservo.Domain.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_bookings_users_user_id");
+
+                    b.Navigation("Resource");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Reservo.Domain.Catalog.Resource", b =>

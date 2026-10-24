@@ -132,9 +132,10 @@ public sealed class ResourceRequestValidator : AbstractValidator<ResourceRequest
 /// <summary>Вывод ресурса из эксплуатации.</summary>
 public sealed record DeactivateResourceRequest
 {
-    public const int ReasonMaxLength = 500;
+    // 400, а не 500: к причине добавляется «Ресурс выведен из эксплуатации: », а поле причины у брони — 500 символов.
+    public const int ReasonMaxLength = 400;
 
-    /// <summary>Причина. На этапе бронирований она попадёт в уведомления владельцам отменённых броней.</summary>
+    /// <summary>Причина. Её увидят владельцы броней, которые отменятся из-за вывода ресурса.</summary>
     /// <example>Ремонт проектора до конца недели</example>
     public string Reason { get; init; } = string.Empty;
 }

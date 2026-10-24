@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Reservo.Domain.Bookings;
 using Reservo.Domain.Catalog;
 using Reservo.Domain.Users;
 
@@ -18,6 +19,8 @@ public interface IAppDbContext
     DbSet<Feature> Features { get; }
 
     DbSet<Resource> Resources { get; }
+
+    DbSet<Booking> Bookings { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

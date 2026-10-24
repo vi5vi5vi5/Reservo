@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Reservo.Application.Auth;
+using Reservo.Application.Bookings;
 using Reservo.Application.Catalog;
 using Reservo.Application.Common.Errors;
 using Reservo.Infrastructure.Persistence.Configurations;
@@ -27,8 +28,19 @@ internal static class ConstraintErrors
 
     public static bool TryTranslate(DbUpdateException exception, [NotNullWhen(true)] out AppException? error)
     {
+        // Оптимистичная блокировка: строку изменили после того, как мы её прочитали (столбец xmin не совпал).
+        if (exception is DbUpdateConcurrencyException)
+        {
+            error = CommonErrors.ConcurrencyConflict();
+            return true;
+        }
+
         error = exception.InnerException switch
         {
+            // Exclusion constraint: пересекающуюся активную бронь того же ресурса уже записал параллельный запрос.
+            PostgresException { SqlState: PostgresErrorCodes.ExclusionViolation, ConstraintName: BookingConfiguration.NoOverlapConstraintName }
+                => BookingErrors.TimeConflict(),
+
             // Уникальный индекс: ошибка зависит от того, какой именно индекс нарушен.
             PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: { } index }
                 when UniqueViolations.TryGetValue(index, out var createError) => createError(),

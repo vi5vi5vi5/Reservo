@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Reservo.Application.Auth;
 using Reservo.Application.Common;
 using Reservo.Infrastructure.Auth;
+using Reservo.Infrastructure.Bookings;
 using Reservo.Infrastructure.Persistence;
 
 namespace Reservo.Infrastructure;
@@ -20,7 +21,13 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Не задана строка подключения 'Default'.");
 
         services.AddDbContext<AppDbContext>(options => options
-            .UseNpgsql(connectionString)
+            // Повтор при временных сбоях: обрыв связи, а главное — взаимоблокировка (deadlock), которую PostgreSQL
+            // устраивает, когда несколько транзакций одновременно вставляют пересекающиеся брони под exclusion constraint.
+            // На повторе вставка упирается в ограничение или в проверку в коде, и клиент получает честный 409.
+            .UseNpgsql(connectionString, npgsql => npgsql.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(2),
+                errorCodesToAdd: null))
             .UseSnakeCaseNamingConvention()
             // Нарушение ограничения (дубль, удаление используемой записи) — ожидаемая ситуация: ConstraintErrors
             // превращает её в ответ 409. Поэтому EF Core не должен писать о ней ERR со стектрейсом.
@@ -44,6 +51,8 @@ public static class DependencyInjection
 
         services.AddOptions<SeedOptions>()
             .Bind(configuration.GetSection(SeedOptions.SectionName));
+
+        services.AddBookingPolicy(configuration);
 
         // Единственный источник «текущего времени». В тестах его можно заменить поддельными часами.
         services.TryAddSingleton(TimeProvider.System);

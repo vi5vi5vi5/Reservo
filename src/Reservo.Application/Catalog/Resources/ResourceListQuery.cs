@@ -11,7 +11,7 @@ public enum ResourceSortBy
 }
 
 /// <summary>Фильтры каталога ресурсов.</summary>
-public sealed class ResourceListQuery : PagedQuery
+public class ResourceListQuery : PagedQuery
 {
     public const int SearchMaxLength = 100;
     public const int MaxFeatureFilters = 20;

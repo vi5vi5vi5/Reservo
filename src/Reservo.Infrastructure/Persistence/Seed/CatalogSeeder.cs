@@ -72,8 +72,24 @@ internal static class CatalogSeeder
             return;
         }
 
-        // Одна транзакция: либо каталог добавится целиком, либо не добавится вовсе.
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Одна транзакция: либо каталог добавится целиком, либо не добавится вовсе. При включённых повторах
+        // (EnableRetryOnFailure) свою транзакцию нужно выполнять через стратегию: при сбое она повторит её целиком.
+        var strategy = db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            db.ChangeTracker.Clear();
+            await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+            await AddCatalogAsync(db, timeProvider, cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
+
+        logger.LogInformation(
+            "Добавлен демо-каталог: {Resources} ресурсов в {Categories} категориях",
+            Resources.Length, Resources.Select(r => r.Category).Distinct().Count());
+    }
+
+    private static async Task AddCatalogAsync(AppDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken)
+    {
 
         Category[] categories =
         [
@@ -136,10 +152,5 @@ internal static class CatalogSeeder
         }
 
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        logger.LogInformation(
-            "Добавлен демо-каталог: {Categories} категорий, {Locations} корпусов, {Features} видов оснащения, {Resources} ресурсов",
-            categories.Length, locations.Length, features.Length, Resources.Length);
     }
 }

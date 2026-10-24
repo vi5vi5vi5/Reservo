@@ -1,6 +1,7 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using Reservo.Application.Auth;
+using Reservo.Application.Bookings;
 using Reservo.Application.Catalog.Categories;
 using Reservo.Application.Catalog.Features;
 using Reservo.Application.Catalog.Locations;
@@ -20,6 +21,9 @@ public static class DependencyInjection
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IFeatureService, FeatureService>();
         services.AddScoped<IResourceService, ResourceService>();
+
+        services.AddScoped<IBookingService, BookingService>();
+        services.AddScoped<IAvailabilityService, AvailabilityService>();
 
         // Регистрирует каждый AbstractValidator<T> из этой сборки как IValidator<T>.
         services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);

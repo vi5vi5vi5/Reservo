@@ -14,4 +14,10 @@ public static class CommonErrors
     /// <summary>Запись нельзя удалить: на неё ссылаются другие данные.</summary>
     public static AppException InUse(string message = "Нельзя удалить: запись используется в других данных.") =>
         new(ErrorKind.Conflict, "in_use", message);
+
+    /// <summary>Оптимистичная блокировка: запись изменили между тем, как мы её прочитали и сохранили.</summary>
+    public static AppException ConcurrencyConflict() =>
+        new(ErrorKind.Conflict, "concurrency_conflict",
+            "Запись только что изменил кто-то другой.",
+            "Обновите данные и повторите действие.");
 }

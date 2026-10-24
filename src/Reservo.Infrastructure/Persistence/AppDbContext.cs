@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Reservo.Application.Common;
+using Reservo.Domain.Bookings;
 using Reservo.Domain.Catalog;
 using Reservo.Domain.Users;
 
@@ -16,6 +17,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Feature> Features => Set<Feature>();
 
     public DbSet<Resource> Resources => Set<Resource>();
+
+    public DbSet<Booking> Bookings => Set<Booking>();
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

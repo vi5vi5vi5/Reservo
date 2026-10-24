@@ -6,6 +6,12 @@ public sealed class SeedOptions
     public const string SectionName = "Seed";
 
     public AdminSeedOptions Admin { get; init; } = new();
+
+    /// <summary>
+    /// Пароль демо-пользователей (студенты, преподаватель). Если пусто, ни они, ни демо-брони не создаются.
+    /// На сервере задаётся переменной Seed__DemoUserPassword.
+    /// </summary>
+    public string? DemoUserPassword { get; init; }
 }
 
 public sealed class AdminSeedOptions

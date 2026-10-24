@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Reservo.Application.Auth;
+using Reservo.Domain.Bookings;
 using Reservo.Domain.Users;
 using Reservo.Infrastructure.Persistence.Seed;
 
@@ -25,20 +26,27 @@ public static class DatabaseInitializer
 
         var logger = provider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(DatabaseInitializer));
         var timeProvider = provider.GetRequiredService<TimeProvider>();
+        var passwordHasher = provider.GetRequiredService<IPasswordHasher>();
+        var seedOptions = provider.GetRequiredService<IOptions<SeedOptions>>().Value;
 
-        await SeedAdminAsync(provider, db, timeProvider, logger, cancellationToken);
+        await SeedAdminAsync(db, passwordHasher, timeProvider, seedOptions.Admin, logger, cancellationToken);
         await CatalogSeeder.SeedAsync(db, timeProvider, logger, cancellationToken);
+        await DemoSeeder.SeedAsync(
+            db, passwordHasher, provider.GetRequiredService<BookingPolicy>(), timeProvider, seedOptions, logger, cancellationToken);
     }
 
     private static async Task SeedAdminAsync(
-        IServiceProvider provider, AppDbContext db, TimeProvider timeProvider, ILogger logger, CancellationToken cancellationToken)
+        AppDbContext db,
+        IPasswordHasher passwordHasher,
+        TimeProvider timeProvider,
+        AdminSeedOptions options,
+        ILogger logger,
+        CancellationToken cancellationToken)
     {
         if (await db.Users.AnyAsync(u => u.Role == UserRole.Admin, cancellationToken))
         {
             return;
         }
-
-        var options = provider.GetRequiredService<IOptions<SeedOptions>>().Value.Admin;
 
         if (string.IsNullOrWhiteSpace(options.Password))
         {
@@ -46,9 +54,7 @@ public static class DatabaseInitializer
             return;
         }
 
-        var hasher = provider.GetRequiredService<IPasswordHasher>();
-
-        db.Users.Add(new User(options.Email, options.FullName, hasher.Hash(options.Password), UserRole.Admin, timeProvider.GetUtcNow()));
+        db.Users.Add(new User(options.Email, options.FullName, passwordHasher.Hash(options.Password), UserRole.Admin, timeProvider.GetUtcNow()));
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Создан администратор {Email}", options.Email);

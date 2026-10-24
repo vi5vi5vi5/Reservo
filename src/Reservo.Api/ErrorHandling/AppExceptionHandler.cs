@@ -42,6 +42,7 @@ internal sealed class AppExceptionHandler(
             {
                 Status = status,
                 Title = error.Message,
+                Detail = error.Detail,
                 Extensions = { [ProblemDetailsSetup.CodeKey] = error.Code },
             },
         });
