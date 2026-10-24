@@ -1,0 +1,26 @@
+name: reservo
+
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: reservo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-reservo}
+      POSTGRES_USER: ${POSTGRES_USER:-reservo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-reservo_dev}
+    ports:
+      # Bound to localhost only: the database must never be reachable from outside.
+      # Host port 5433, because 5432 may be taken by a locally installed PostgreSQL.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      # postgres:18 images keep data under /var/lib/postgresql (not .../data as in older guides).
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db-data:

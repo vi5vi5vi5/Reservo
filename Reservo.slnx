@@ -1,0 +1,22 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path=".env.example" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+    <File Path="dotnet-tools.json" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Reservo.Api/Reservo.Api.csproj" />
+    <Project Path="src/Reservo.Application/Reservo.Application.csproj" />
+    <Project Path="src/Reservo.Domain/Reservo.Domain.csproj" />
+    <Project Path="src/Reservo.Infrastructure/Reservo.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Reservo.IntegrationTests/Reservo.IntegrationTests.csproj" />
+    <Project Path="tests/Reservo.UnitTests/Reservo.UnitTests.csproj" />
+  </Folder>
+</Solution>

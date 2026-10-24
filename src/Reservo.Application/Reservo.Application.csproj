@@ -1,0 +1,9 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Application layer: use-case services, DTOs, validators, abstractions. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\Reservo.Domain\Reservo.Domain.csproj" />
+  </ItemGroup>
+
+</Project>
