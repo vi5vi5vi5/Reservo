@@ -20,5 +20,7 @@ public sealed class JwtOptions
 
     public int AccessTokenMinutes { get; init; } = 30;
 
+    public int RefreshTokenDays { get; init; } = 14;
+
     public SymmetricSecurityKey GetSigningKey() => new(Encoding.UTF8.GetBytes(Key));
 }

@@ -1,12 +1,18 @@
 using System.Diagnostics.CodeAnalysis;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reservo.Application.Audit;
 using Reservo.Application.Auth;
 using Reservo.Application.Common;
 using Reservo.Application.Common.Errors;
 using Reservo.Application.Common.Paging;
+using Reservo.Application.Notifications;
+using Reservo.Application.Realtime;
+using Reservo.Domain.Audit;
 using Reservo.Domain.Bookings;
 using Reservo.Domain.Catalog;
+using Reservo.Domain.Notifications;
+using Reservo.Domain.Users;
 
 namespace Reservo.Application.Bookings;
 
@@ -29,11 +35,17 @@ public interface IBookingService
     Task<BookingDto> RejectAsync(int id, RejectBookingRequest request, CancellationToken cancellationToken);
 }
 
+/// <remarks>
+/// Каждое изменение брони сохраняется вместе с записью в журнале операций и уведомлениями — одной транзакцией
+/// (PROJECT.md, 5.5 и 5.6). Живые обновления через SignalR уходят только после сохранения.
+/// Уведомление не отправляется тому, кто сам совершил действие: он и так о нём знает.
+/// </remarks>
 public sealed class BookingService(
     IAppDbContext db,
     ICurrentUser currentUser,
     BookingPolicy policy,
     TimeProvider timeProvider,
+    IRealtimeNotifier realtime,
     ILogger<BookingService> logger) : IBookingService
 {
     public async Task<BookingDto> CreateAsync(CreateBookingRequest request, CancellationToken cancellationToken)
@@ -45,29 +57,55 @@ public sealed class BookingService(
         var startAt = request.StartAt!.Value.ToUniversalTime();
         var endAt = request.EndAt!.Value.ToUniversalTime();
 
-        var resource = await db.Resources.AsNoTracking().SingleOrDefaultAsync(r => r.Id == request.ResourceId, cancellationToken)
-            ?? throw BookingErrors.ResourceNotFound(request.ResourceId);
+        // Бронь, журнал и уведомления — одной транзакцией. Журналу и уведомлениям нужен id брони, а его выдаёт база
+        // только при сохранении, поэтому сохранений два: сначала бронь, затем всё остальное.
+        var (booking, notifications) = await db.ExecuteInTransactionAsync(async ct =>
+        {
+            var resource = await db.Resources.AsNoTracking().SingleOrDefaultAsync(r => r.Id == request.ResourceId, ct)
+                ?? throw BookingErrors.ResourceNotFound(request.ResourceId);
 
-        // 1. Правила, которым не нужна база (BR-02–BR-08).
-        BookingRules.CheckSlot(startAt, endAt, request.Attendees, resource, policy, now).ThrowIfViolated();
+            // 1. Правила, которым не нужна база (BR-02–BR-08).
+            BookingRules.CheckSlot(startAt, endAt, request.Attendees, resource, policy, now).ThrowIfViolated();
 
-        // 2. Правила, которым нужны другие брони (BR-09–BR-11).
-        await EnsureNoOverlapsAsync(resource, userId, startAt, endAt, exceptBookingId: 0, cancellationToken);
+            // 2. Правила, которым нужны другие брони (BR-09–BR-11).
+            await EnsureNoOverlapsAsync(resource, userId, startAt, endAt, exceptBookingId: 0, ct);
 
-        var activeBookings = await ActiveBookings()
-            .CountAsync(b => b.UserId == userId && b.StartAt > now, cancellationToken);
-        BookingRules.CheckUserLimit(activeBookings, policy).ThrowIfViolated();
+            var activeBookings = await ActiveBookings().CountAsync(b => b.UserId == userId && b.StartAt > now, ct);
+            BookingRules.CheckUserLimit(activeBookings, policy).ThrowIfViolated();
 
-        var booking = new Booking(resource.Id, userId, startAt, endAt, request.Title, request.Attendees, resource.RequiresApproval, now);
-        db.Bookings.Add(booking);
+            var booking = new Booking(resource.Id, userId, startAt, endAt, request.Title, request.Attendees, resource.RequiresApproval, now);
+            db.Bookings.Add(booking);
 
-        // 3. Если параллельный запрос успел занять то же время между проверкой и сохранением,
-        //    exclusion constraint в базе не даст записать пересечение, и клиент получит 409 (ConstraintErrors).
-        await db.SaveChangesAsync(cancellationToken);
+            // 3. Если параллельный запрос успел занять то же время между проверкой и сохранением,
+            //    exclusion constraint в базе не даст записать пересечение, и клиент получит 409 (ConstraintErrors).
+            await db.SaveChangesAsync(ct);
+
+            db.AuditLogs.Add(AuditEntries.ForBooking(userId, AuditAction.BookingCreated, booking.Id, new
+            {
+                resourceId = resource.Id,
+                resource = resource.Name,
+                booking.StartAt,
+                booking.EndAt,
+                booking.Title,
+                booking.Attendees,
+                booking.Status,
+            }, now));
+
+            var notifications = booking.Status == BookingStatus.Pending
+                ? await PendingApprovalNotificationsAsync(booking, resource.Name, now, ct)
+                : new List<Notification> { BookingNotifications.Confirmed(booking, resource.Name, policy, now) };
+
+            db.Notifications.AddRange(notifications);
+            await db.SaveChangesAsync(ct);
+
+            return (booking, notifications);
+        }, cancellationToken);
+
+        await PublishAsync(notifications, booking.ResourceId, cancellationToken);
 
         logger.LogInformation(
             "Пользователь {UserId} забронировал ресурс {ResourceId}: бронь {BookingId}, статус {Status}",
-            userId, resource.Id, booking.Id, booking.Status);
+            userId, booking.ResourceId, booking.Id, booking.Status);
 
         return await LoadAsync(booking.Id, cancellationToken);
     }
@@ -97,18 +135,34 @@ public sealed class BookingService(
         // Лимит броней не проверяем — их число от изменения не меняется.
         await EnsureNoOverlapsAsync(booking.Resource, booking.UserId, startAt, endAt, exceptBookingId: booking.Id, cancellationToken);
 
-        var statusBefore = booking.Status;
+        var before = new { booking.StartAt, booking.EndAt, booking.Title, booking.Attendees, booking.Status };
         booking.Update(startAt, endAt, request.Title, request.Attendees, booking.Resource.RequiresApproval, now);
-        await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Изменена бронь {BookingId}, статус {StatusBefore} → {StatusAfter}", id, statusBefore, booking.Status);
+        db.AuditLogs.Add(AuditEntries.ForBooking(currentUser.Id, AuditAction.BookingUpdated, booking.Id, AuditEntries.Changes(
+            ("startAt", before.StartAt, booking.StartAt),
+            ("endAt", before.EndAt, booking.EndAt),
+            ("title", before.Title, booking.Title),
+            ("attendees", before.Attendees, booking.Attendees),
+            ("status", before.Status, booking.Status)), now));
+
+        // Перенесённая бронь, которая ждёт согласования, снова попадает в очередь администраторов (PROJECT.md, 5.5).
+        var timeChanged = before.StartAt != booking.StartAt || before.EndAt != booking.EndAt;
+        var notifications = timeChanged && booking.Status == BookingStatus.Pending
+            ? await PendingApprovalNotificationsAsync(booking, booking.Resource.Name, now, cancellationToken)
+            : [];
+
+        db.Notifications.AddRange(notifications);
+        await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(notifications, booking.ResourceId, cancellationToken);
+
+        logger.LogInformation("Изменена бронь {BookingId}, статус {StatusBefore} → {StatusAfter}", id, before.Status, booking.Status);
         return await LoadAsync(id, cancellationToken);
     }
 
     public async Task<BookingDto> CancelAsync(int id, CancelBookingRequest request, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var booking = await db.Bookings.SingleOrDefaultAsync(b => b.Id == id, cancellationToken);
+        var booking = await db.Bookings.Include(b => b.Resource).SingleOrDefaultAsync(b => b.Id == id, cancellationToken);
 
         EnsureCanSee(booking);
 
@@ -122,7 +176,15 @@ public sealed class BookingService(
         }
 
         booking.Cancel(request.Reason, now);
+        db.AuditLogs.Add(AuditEntries.ForBooking(currentUser.Id, AuditAction.BookingCancelled, booking.Id, new { reason = booking.StatusReason }, now));
+
+        var notifications = isOwner
+            ? []
+            : new List<Notification> { BookingNotifications.Cancelled(booking, booking.Resource.Name, booking.StatusReason!, policy, now) };
+
+        db.Notifications.AddRange(notifications);
         await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(notifications, booking.ResourceId, cancellationToken);
 
         logger.LogInformation("Бронь {BookingId} отменена пользователем {UserId}", id, currentUser.Id);
         return await LoadAsync(id, cancellationToken);
@@ -174,7 +236,7 @@ public sealed class BookingService(
     public async Task<BookingDto> ApproveAsync(int id, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var booking = await db.Bookings.SingleOrDefaultAsync(b => b.Id == id, cancellationToken)
+        var booking = await db.Bookings.Include(b => b.Resource).SingleOrDefaultAsync(b => b.Id == id, cancellationToken)
             ?? throw BookingErrors.NotFound();
 
         // Заявка на согласовании уже занимает время в расписании (Pending — активный статус),
@@ -182,7 +244,12 @@ public sealed class BookingService(
         BookingRules.CheckCanApprove(booking, now).ThrowIfViolated();
 
         booking.Approve(now);
+        db.AuditLogs.Add(AuditEntries.ForBooking(currentUser.Id, AuditAction.BookingApproved, booking.Id, null, now));
+
+        var notifications = NotifyOwnerUnlessActor(booking, () => BookingNotifications.Approved(booking, booking.Resource.Name, policy, now));
+        db.Notifications.AddRange(notifications);
         await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(notifications, booking.ResourceId, cancellationToken);
 
         logger.LogInformation("Администратор {AdminId} одобрил бронь {BookingId}", currentUser.Id, id);
         return await LoadAsync(id, cancellationToken);
@@ -191,13 +258,19 @@ public sealed class BookingService(
     public async Task<BookingDto> RejectAsync(int id, RejectBookingRequest request, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var booking = await db.Bookings.SingleOrDefaultAsync(b => b.Id == id, cancellationToken)
+        var booking = await db.Bookings.Include(b => b.Resource).SingleOrDefaultAsync(b => b.Id == id, cancellationToken)
             ?? throw BookingErrors.NotFound();
 
         BookingRules.CheckCanReject(booking).ThrowIfViolated();
 
         booking.Reject(request.Reason, now);
+        db.AuditLogs.Add(AuditEntries.ForBooking(currentUser.Id, AuditAction.BookingRejected, booking.Id, new { reason = booking.StatusReason }, now));
+
+        var notifications = NotifyOwnerUnlessActor(booking,
+            () => BookingNotifications.Rejected(booking, booking.Resource.Name, booking.StatusReason!, policy, now));
+        db.Notifications.AddRange(notifications);
         await db.SaveChangesAsync(cancellationToken);
+        await PublishAsync(notifications, booking.ResourceId, cancellationToken);
 
         logger.LogInformation("Администратор {AdminId} отклонил бронь {BookingId}", currentUser.Id, id);
         return await LoadAsync(id, cancellationToken);
@@ -231,6 +304,37 @@ public sealed class BookingService(
         {
             throw BookingRules.UserOverlap(own.ResourceName, own.StartAt, own.EndAt, policy).ToAppException();
         }
+    }
+
+    /// <summary>Бронь ждёт согласования: сообщаем владельцу и всем активным администраторам (кроме самого владельца).</summary>
+    private async Task<List<Notification>> PendingApprovalNotificationsAsync(
+        Booking booking, string resourceName, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var requesterName = await db.Users
+            .Where(u => u.Id == booking.UserId)
+            .Select(u => u.FullName)
+            .SingleAsync(cancellationToken);
+
+        var adminIds = await db.Users
+            .Where(u => u.Role == UserRole.Admin && u.IsActive && u.Id != booking.UserId)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+
+        var notifications = new List<Notification> { BookingNotifications.PendingApproval(booking, resourceName, policy, now) };
+        notifications.AddRange(adminIds.Select(adminId =>
+            BookingNotifications.ApprovalRequested(booking, resourceName, requesterName, adminId, policy, now)));
+
+        return notifications;
+    }
+
+    private List<Notification> NotifyOwnerUnlessActor(Booking booking, Func<Notification> create) =>
+        booking.UserId == currentUser.Id ? [] : [create()];
+
+    /// <summary>После сохранения: уведомления — получателям, «расписание изменилось» — всем, кто смотрит ресурс.</summary>
+    private async Task PublishAsync(IReadOnlyCollection<Notification> notifications, int resourceId, CancellationToken cancellationToken)
+    {
+        await realtime.NotificationsCreatedAsync(notifications, cancellationToken);
+        await realtime.ScheduleChangedAsync([resourceId], cancellationToken);
     }
 
     /// <summary>Активные брони (Pending и Confirmed) — только они занимают время.</summary>

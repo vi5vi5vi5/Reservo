@@ -10,13 +10,21 @@ public interface IPasswordHasher
     bool Verify(string passwordHash, string password);
 }
 
-/// <summary>Выдаёт подписанные access-токены (JWT).</summary>
+/// <summary>Выдаёт подписанные access-токены (JWT) и случайные refresh-токены.</summary>
 public interface ITokenService
 {
     AccessToken CreateAccessToken(User user);
+
+    /// <summary>Новый refresh-токен: сам токен отдаётся клиенту, в базу попадает только его хеш.</summary>
+    NewRefreshToken CreateRefreshToken(DateTimeOffset now);
+
+    /// <summary>Хеш, по которому refresh-токен ищется в базе.</summary>
+    string HashRefreshToken(string token);
 }
 
 public sealed record AccessToken(string Token, DateTimeOffset ExpiresAt);
+
+public sealed record NewRefreshToken(string Token, string Hash, DateTimeOffset ExpiresAt);
 
 /// <summary>Кто выполняет текущий запрос. Реализуется в слое API по claims из JWT.</summary>
 public interface ICurrentUser

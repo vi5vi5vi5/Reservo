@@ -19,6 +19,11 @@ public sealed class BookingOptions
     public int MaxAdvanceDays { get; init; } = 30;
 
     public int MaxActiveBookingsPerUser { get; init; } = 5;
+
+    public int ReminderMinutesBefore { get; init; } = 30;
+
+    /// <summary>Как часто срабатывает фоновая задача броней. 0 — задача выключена (например, в интеграционных тестах).</summary>
+    public int LifecycleIntervalSeconds { get; init; } = 60;
 }
 
 /// <summary>Настройки площадки из секции "Site".</summary>
@@ -40,8 +45,9 @@ internal static class BookingSettings
     {
         services.AddOptions<BookingOptions>()
             .Bind(configuration.GetSection(BookingOptions.SectionName))
-            .Validate(o => o.SlotStepMinutes > 0 && o.MinDurationMinutes > 0 && o.MaxAdvanceDays > 0 && o.MaxActiveBookingsPerUser > 0,
-                "Числа в секции Booking должны быть положительными.")
+            .Validate(o => o.SlotStepMinutes > 0 && o.MinDurationMinutes > 0 && o.MaxAdvanceDays > 0
+                           && o.MaxActiveBookingsPerUser > 0 && o.ReminderMinutesBefore > 0 && o.LifecycleIntervalSeconds >= 0,
+                "Числа в секции Booking должны быть положительными (LifecycleIntervalSeconds — не меньше нуля).")
             .Validate(o => o.DefaultMaxDurationMinutes >= o.MinDurationMinutes,
                 "Booking:DefaultMaxDurationMinutes не может быть меньше Booking:MinDurationMinutes.")
             .ValidateOnStart();
@@ -63,6 +69,7 @@ internal static class BookingSettings
                 booking.DefaultMaxDurationMinutes,
                 booking.MaxAdvanceDays,
                 booking.MaxActiveBookingsPerUser,
+                booking.ReminderMinutesBefore,
                 TimeZoneInfo.FindSystemTimeZoneById(site.TimeZone));
         });
 

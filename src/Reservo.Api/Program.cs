@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Reservo.Api.Auth;
 using Reservo.Api.ErrorHandling;
 using Reservo.Api.OpenApi;
+using Reservo.Api.Realtime;
 using Reservo.Api.Validation;
 using Reservo.Application;
 using Reservo.Infrastructure;
@@ -48,6 +49,7 @@ try
 
     builder.Services.AddReservoProblemDetails();
     builder.Services.AddReservoSwagger();
+    builder.Services.AddReservoRealtime();
 
     var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
     builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -80,6 +82,7 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+    app.MapHub<LiveHub>(RealtimeSetup.HubPath);
     app.MapHealthChecks("/health").AllowAnonymous();
 
     await app.RunAsync();

@@ -11,8 +11,6 @@ namespace Reservo.Domain.Bookings;
 /// </summary>
 public static class BookingRules
 {
-    private static readonly CultureInfo Russian = CultureInfo.GetCultureInfo("ru-RU");
-
     /// <summary>
     /// Пересекаются ли интервалы. Они полуоткрытые [start, end), поэтому 10:00–11:00 и 11:00–12:00 не пересекаются.
     /// Тем же условием пользуются LINQ-запросы в сервисах и exclusion constraint в базе.
@@ -108,7 +106,7 @@ public static class BookingRules
         new(
             "booking.time_conflict",
             "Ресурс уже занят на это время.",
-            $"{resourceName}: занято {Describe(busyFrom, busyTo, policy)}.",
+            $"{resourceName}: занято {policy.DescribeInterval(busyFrom, busyTo)}.",
             IsConflict: true);
 
     /// <summary>BR-10: у пользователя не больше MaxActiveBookingsPerUser активных будущих броней.</summary>
@@ -124,7 +122,7 @@ public static class BookingRules
         new(
             "booking.user_overlap",
             "У вас уже есть бронь на это время.",
-            $"Ваша бронь: {otherResourceName}, {Describe(otherFrom, otherTo, policy)}.",
+            $"Ваша бронь: {otherResourceName}, {policy.DescribeInterval(otherFrom, otherTo)}.",
             IsConflict: true);
 
     /// <summary>BR-12: изменить можно только активную бронь, которая ещё не началась.</summary>
@@ -181,14 +179,6 @@ public static class BookingRules
     /// <summary>«Отменить можно только активную бронь, а эта — «Отменена».»</summary>
     private static DomainError WrongStatus(string rule, Booking booking) =>
         new("booking.invalid_status_transition", $"{rule}, а эта — «{booking.Status.ToRussian()}».", IsConflict: true);
-
-    /// <summary>«25 октября с 14:00 до 15:00» по местному времени площадки.</summary>
-    private static string Describe(DateTimeOffset from, DateTimeOffset to, BookingPolicy policy)
-    {
-        var localFrom = policy.ToLocal(from);
-        var localTo = policy.ToLocal(to);
-        return $"{localFrom.ToString("d MMMM", Russian)} с {localFrom.ToString("HH:mm", Russian)} до {localTo.ToString("HH:mm", Russian)}";
-    }
 
     private static string Format(TimeOnly time) => time.ToString("HH:mm", CultureInfo.InvariantCulture);
 }

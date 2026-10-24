@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Reservo.Application.Auth;
 using Reservo.Application.Common;
 using Reservo.Infrastructure.Auth;
+using Reservo.Infrastructure.BackgroundJobs;
 using Reservo.Infrastructure.Bookings;
 using Reservo.Infrastructure.Persistence;
 
@@ -59,6 +60,8 @@ public static class DependencyInjection
 
         services.AddSingleton<IPasswordHasher, PasswordHasher>();
         services.AddSingleton<ITokenService, JwtTokenService>();
+
+        services.AddHostedService<BookingLifecycleWorker>();
 
         return services;
     }

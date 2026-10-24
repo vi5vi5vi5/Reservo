@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Reservo.Application.Audit;
 using Reservo.Application.Bookings;
 using Reservo.Application.Common.Paging;
 
@@ -10,8 +11,16 @@ namespace Reservo.Api.Controllers;
 [ApiController]
 [Route("api/bookings")]
 [Produces("application/json")]
-public sealed class BookingsController(IBookingService bookingService) : ControllerBase
+public sealed class BookingsController(IBookingService bookingService, IAuditService auditService) : ControllerBase
 {
+    /// <summary>История брони: создание, изменения, согласование, отмена — по порядку.</summary>
+    /// <response code="404">Брони нет или она чужая (<c>not_found</c>).</response>
+    [HttpGet("{id:int}/history")]
+    [ProducesResponseType<IReadOnlyList<AuditLogDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<IReadOnlyList<AuditLogDto>> GetHistory(int id, CancellationToken cancellationToken) =>
+        auditService.GetBookingHistoryAsync(id, cancellationToken);
+
     /// <summary>Забронировать ресурс.</summary>
     /// <remarks>
     /// Если ресурс требует согласования, бронь создаётся в статусе <c>Pending</c>, иначе сразу <c>Confirmed</c>.

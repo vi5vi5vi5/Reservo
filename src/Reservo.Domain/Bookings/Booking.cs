@@ -118,6 +118,9 @@ public class Booking
         UpdatedAt = now;
     }
 
+    /// <summary>Напоминание отправлено — второй раз фоновая задача его не пошлёт.</summary>
+    public void MarkReminderSent(DateTimeOffset now) => ReminderSentAt = now;
+
     private void SetDetails(DateTimeOffset startAt, DateTimeOffset endAt, string title, int? attendees)
     {
         // В базе время хранится только в UTC: Npgsql и не примет другое смещение.

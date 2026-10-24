@@ -1,11 +1,16 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Reservo.Application.Audit;
 using Reservo.Application.Auth;
 using Reservo.Application.Common;
 using Reservo.Application.Common.Errors;
 using Reservo.Application.Common.Paging;
+using Reservo.Application.Notifications;
+using Reservo.Application.Realtime;
+using Reservo.Domain.Audit;
 using Reservo.Domain.Bookings;
 using Reservo.Domain.Catalog;
+using Reservo.Domain.Notifications;
 
 namespace Reservo.Application.Catalog.Resources;
 
@@ -27,7 +32,9 @@ public interface IResourceService
 public sealed class ResourceService(
     IAppDbContext db,
     ICurrentUser currentUser,
+    BookingPolicy policy,
     TimeProvider timeProvider,
+    IRealtimeNotifier realtime,
     ILogger<ResourceService> logger) : IResourceService
 {
     public async Task<PagedResult<ResourceDto>> GetListAsync(ResourceListQuery query, CancellationToken cancellationToken)
@@ -51,17 +58,27 @@ public sealed class ResourceService(
 
     public async Task<ResourceDto> CreateAsync(ResourceRequest request, CancellationToken cancellationToken)
     {
-        await EnsureCategoryAndLocationExistAsync(request, cancellationToken);
-        var features = await LoadFeaturesAsync(request.FeatureIds, cancellationToken);
+        var now = timeProvider.GetUtcNow();
 
-        var resource = new Resource(request.ToDetails(), timeProvider.GetUtcNow());
-        resource.SetFeatures(features);
+        // Ресурс и запись журнала — одной транзакцией: журналу нужен id ресурса, который выдаёт база при сохранении.
+        var resourceId = await db.ExecuteInTransactionAsync(async ct =>
+        {
+            await EnsureCategoryAndLocationExistAsync(request, ct);
+            var features = await LoadFeaturesAsync(request.FeatureIds, ct);
 
-        db.Resources.Add(resource);
-        await db.SaveChangesAsync(cancellationToken);
+            var resource = new Resource(request.ToDetails(), now);
+            resource.SetFeatures(features);
+            db.Resources.Add(resource);
+            await db.SaveChangesAsync(ct);
 
-        logger.LogInformation("Создан ресурс {ResourceId} «{Name}»", resource.Id, resource.Name);
-        return await GetByIdAsync(resource.Id, cancellationToken);
+            db.AuditLogs.Add(AuditEntries.ForResource(currentUser.Id, AuditAction.ResourceCreated, resource.Id, new { resource.Name }, now));
+            await db.SaveChangesAsync(ct);
+
+            return resource.Id;
+        }, cancellationToken);
+
+        logger.LogInformation("Создан ресурс {ResourceId}", resourceId);
+        return await GetByIdAsync(resourceId, cancellationToken);
     }
 
     public async Task<ResourceDto> UpdateAsync(int id, ResourceRequest request, CancellationToken cancellationToken)
@@ -75,8 +92,25 @@ public sealed class ResourceService(
         await EnsureCategoryAndLocationExistAsync(request, cancellationToken);
         var features = await LoadFeaturesAsync(request.FeatureIds, cancellationToken);
 
+        var before = Snapshot(resource);
         resource.Update(request.ToDetails(), timeProvider.GetUtcNow());
         resource.SetFeatures(features);
+        var after = Snapshot(resource);
+
+        db.AuditLogs.Add(AuditEntries.ForResource(currentUser.Id, AuditAction.ResourceUpdated, id, AuditEntries.Changes(
+            ("name", before.Name, after.Name),
+            ("categoryId", before.CategoryId, after.CategoryId),
+            ("locationId", before.LocationId, after.LocationId),
+            ("floor", before.Floor, after.Floor),
+            ("capacity", before.Capacity, after.Capacity),
+            ("requiresApproval", before.RequiresApproval, after.RequiresApproval),
+            ("openTime", before.OpenTime, after.OpenTime),
+            ("closeTime", before.CloseTime, after.CloseTime),
+            ("maxDurationMinutes", before.MaxDurationMinutes, after.MaxDurationMinutes),
+            ("imageUrl", before.ImageUrl, after.ImageUrl),
+            ("description", before.Description, after.Description),
+            ("features", before.Features, after.Features)), timeProvider.GetUtcNow()));
+
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Изменён ресурс {ResourceId}", id);
@@ -92,22 +126,35 @@ public sealed class ResourceService(
         }
 
         var now = timeProvider.GetUtcNow();
+        var actorId = currentUser.Id;
+        var reason = $"Ресурс выведен из эксплуатации: {request.Reason.Trim()}";
+
         resource.Deactivate(now);
 
-        // BR-15: все активные брони, которые ещё не закончились, отменяются с понятной владельцу причиной.
+        // BR-15: все активные брони, которые ещё не закончились, отменяются; владельцы получают уведомления.
         var affected = await db.Bookings
             .Where(b => b.ResourceId == id
                         && (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
                         && b.EndAt > now)
             .ToListAsync(cancellationToken);
 
+        var notifications = new List<Notification>();
         foreach (var booking in affected)
         {
-            booking.Cancel($"Ресурс выведен из эксплуатации: {request.Reason.Trim()}", now);
+            booking.Cancel(reason, now);
+            db.AuditLogs.Add(AuditEntries.ForBooking(actorId, AuditAction.BookingCancelled, booking.Id, new { reason }, now));
+            notifications.Add(BookingNotifications.Cancelled(booking, resource.Name, reason, policy, now));
         }
 
-        // Ресурс и все его брони сохраняются одной транзакцией: либо всё, либо ничего.
+        db.AuditLogs.Add(AuditEntries.ForResource(actorId, AuditAction.ResourceDeactivated, id,
+            new { reason = request.Reason.Trim(), cancelledBookings = affected.Count }, now));
+        db.Notifications.AddRange(notifications);
+
+        // Ресурс, его брони, журнал и уведомления сохраняются одной транзакцией: либо всё, либо ничего.
         await db.SaveChangesAsync(cancellationToken);
+
+        await realtime.NotificationsCreatedAsync(notifications, cancellationToken);
+        await realtime.ScheduleChangedAsync([id], cancellationToken);
 
         logger.LogInformation(
             "Ресурс {ResourceId} выведен из эксплуатации, отменено броней: {CancelledBookings}. Причина: {Reason}",
@@ -122,11 +169,24 @@ public sealed class ResourceService(
             return;
         }
 
-        resource.Activate(timeProvider.GetUtcNow());
+        var now = timeProvider.GetUtcNow();
+        resource.Activate(now);
+        db.AuditLogs.Add(AuditEntries.ForResource(currentUser.Id, AuditAction.ResourceActivated, id, null, now));
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Ресурс {ResourceId} возвращён в эксплуатацию", id);
     }
+
+    /// <summary>Снимок полей для журнала: что было до изменения и что стало после.</summary>
+    private static ResourceSnapshot Snapshot(Resource r) => new(
+        r.Name, r.CategoryId, r.LocationId, r.Floor, r.Capacity, r.RequiresApproval, r.OpenTime, r.CloseTime,
+        r.MaxDurationMinutes, r.ImageUrl, r.Description,
+        // Список оснащения сравнивается строкой «1,2,5»: массивы сравнивались бы по ссылке, а не по содержимому.
+        string.Join(",", r.Features.Select(f => f.Id).Order()));
+
+    private sealed record ResourceSnapshot(
+        string Name, int CategoryId, int LocationId, int? Floor, int? Capacity, bool RequiresApproval, TimeOnly OpenTime,
+        TimeOnly CloseTime, int? MaxDurationMinutes, string? ImageUrl, string? Description, string Features);
 
     private async Task<Resource> FindAsync(int id, CancellationToken cancellationToken) =>
         await db.Resources.FindAsync([id], cancellationToken) ?? throw NotFound();

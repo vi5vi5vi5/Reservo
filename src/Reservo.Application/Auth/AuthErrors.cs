@@ -13,4 +13,7 @@ public static class AuthErrors
 
     public static AppException UserBlocked() =>
         new(ErrorKind.Forbidden, "auth.user_blocked", "Учётная запись заблокирована. Обратитесь к администратору.");
+
+    public static AppException InvalidRefreshToken() =>
+        new(ErrorKind.Unauthorized, "auth.invalid_refresh_token", "Сессия истекла или недействительна. Войдите заново.");
 }

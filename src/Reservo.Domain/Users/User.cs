@@ -35,6 +35,13 @@ public class User
 
     public DateTimeOffset CreatedAt { get; private set; }
 
+    public void ChangeRole(UserRole role) => Role = role;
+
+    /// <summary>Заблокированный пользователь не может войти и обновить токен (BR-16).</summary>
+    public void Block() => IsActive = false;
+
+    public void Unblock() => IsActive = true;
+
     /// <summary>
     /// Email хранится и сравнивается в нижнем регистре, поэтому «Ivan@Mail.ru» и «ivan@mail.ru» — один и тот же аккаунт.
     /// </summary>

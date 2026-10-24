@@ -14,6 +14,7 @@ internal static class BookingTestData
         DefaultMaxDurationMinutes: 240,
         MaxAdvanceDays: 30,
         MaxActiveBookingsPerUser: 5,
+        ReminderMinutesBefore: 30,
         TimeZone: TimeZoneInfo.FindSystemTimeZoneById("Europe/Moscow"));
 
     /// <summary>«Сейчас» во всех тестах: 24 октября 2026, 12:00 по Москве.</summary>
