@@ -2,6 +2,19 @@
 
   <!-- Application layer: use-case services, DTOs, validators, abstractions. -->
 
+  <PropertyGroup>
+    <!-- XML comments on DTOs show up in Swagger. Missing comments are not warnings. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Only for DbSet<T> and LINQ async operators; the PostgreSQL provider lives in Infrastructure (PROJECT.md, 8.2). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" />
+    <PackageReference Include="FluentValidation" />
+    <PackageReference Include="FluentValidation.DependencyInjectionExtensions" />
+  </ItemGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Reservo.Domain\Reservo.Domain.csproj" />
   </ItemGroup>

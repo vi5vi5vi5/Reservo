@@ -1,9 +1,25 @@
 using Microsoft.EntityFrameworkCore;
+using Reservo.Application.Common;
+using Reservo.Domain.Users;
 
 namespace Reservo.Infrastructure.Persistence;
 
-public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
+public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IAppDbContext
 {
+    public DbSet<User> Users => Set<User>();
+
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (ConstraintErrors.TryTranslate(ex, out var error))
+        {
+            throw error;
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // btree_gist lets a GiST index combine "resource_id =" with "time ranges overlap".

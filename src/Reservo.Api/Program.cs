@@ -1,5 +1,9 @@
-using Microsoft.OpenApi;
+using System.Text.Json.Serialization;
+using Reservo.Api.Auth;
 using Reservo.Api.ErrorHandling;
+using Reservo.Api.OpenApi;
+using Reservo.Api.Validation;
+using Reservo.Application;
 using Reservo.Infrastructure;
 using Reservo.Infrastructure.Persistence;
 using Serilog;
@@ -20,17 +24,22 @@ try
         .ReadFrom.Services(services)
         .Enrich.FromLogContext());
 
+    builder.Services.AddApplication();
     builder.Services.AddInfrastructure(builder.Configuration);
+    builder.Services.AddReservoAuth();
 
-    builder.Services.AddControllers();
+    builder.Services
+        .AddControllers(options =>
+        {
+            options.Filters.Add<FluentValidationFilter>();
+            // Required fields are checked by FluentValidation (with Russian messages), not by MVC's implicit [Required].
+            options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+        })
+        // Enums travel as text: "role": "Admin", not "role": 1.
+        .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
     builder.Services.AddReservoProblemDetails();
-
-    builder.Services.AddSwaggerGen(options => options.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "Reservo API",
-        Version = "v1",
-        Description = "Бронирование аудиторий, лабораторий, переговорных и оборудования.",
-    }));
+    builder.Services.AddReservoSwagger();
 
     var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
     builder.Services.AddCors(options => options.AddDefaultPolicy(policy => policy
@@ -41,22 +50,28 @@ try
 
     var app = builder.Build();
 
-    await app.Services.MigrateDatabaseAsync();
+    await app.Services.InitializeDatabaseAsync();
 
+    // First in the pipeline, so it logs the final status code — after error handlers have turned exceptions into 4xx.
+    app.UseSerilogRequestLogging();
     app.UseExceptionHandler();
     app.UseStatusCodePages();
-    app.UseSerilogRequestLogging();
 
     // Swagger stays on in every environment: it is the demo tool for the project defence.
     app.UseSwagger();
-    app.UseSwaggerUI(options => options.DocumentTitle = "Reservo API");
+    app.UseSwaggerUI(options =>
+    {
+        options.DocumentTitle = "Reservo API";
+        options.EnablePersistAuthorization();
+    });
 
     app.UseHttpsRedirection();
     app.UseCors();
+    app.UseAuthentication();
     app.UseAuthorization();
 
     app.MapControllers();
-    app.MapHealthChecks("/health");
+    app.MapHealthChecks("/health").AllowAnonymous();
 
     await app.RunAsync();
 }
