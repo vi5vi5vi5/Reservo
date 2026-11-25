@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Time.Testing;
+using System.Net.Http.Json;
+using Reservo.Application.Audit;
+using Reservo.Domain.Audit;
 using Reservo.Application.Bookings;
 using Reservo.Application.Common;
 using Reservo.Application.Realtime;
@@ -51,6 +54,10 @@ public class LifecycleTests(ReservoApiFactory factory)
         Assert.Equal(BookingStatus.Confirmed, await StatusAsync(remindId));
         Assert.Equal(1, await NotificationCountAsync(user.UserId, NotificationType.BookingReminder));
         Assert.Equal(1, await NotificationCountAsync(user.UserId, NotificationType.BookingRejected));
+
+        // Напоминание видно в истории брони — от имени системы.
+        var history = await user.Client.GetFromJsonAsync<List<AuditLogDto>>($"/api/bookings/{remindId}/history", TestApi.Json);
+        Assert.Contains(history!, h => h.Action == AuditAction.BookingReminderSent && h.ActorId == null);
 
         // Через 5 минут напоминание не повторяется.
         clock.Advance(TimeSpan.FromMinutes(5));

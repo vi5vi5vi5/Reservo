@@ -24,6 +24,8 @@ public interface IAppDbContext
 
     DbSet<Resource> Resources { get; }
 
+    DbSet<Space> Spaces { get; }
+
     DbSet<Booking> Bookings { get; }
 
     DbSet<AuditLog> AuditLogs { get; }

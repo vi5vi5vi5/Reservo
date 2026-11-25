@@ -1,5 +1,6 @@
 using FluentValidation.TestHelper;
 using Reservo.Application.Catalog.Resources;
+using Reservo.Domain.Catalog;
 
 namespace Reservo.UnitTests.Catalog;
 
@@ -41,6 +42,29 @@ public class ResourceValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.CategoryId);
         result.ShouldHaveValidationErrorFor(x => x.LocationId);
         result.ShouldHaveValidationErrorFor(x => x.Name);
+    }
+
+    [Fact]
+    public void Overnight_resource_may_have_multi_day_limit()
+    {
+        var request = Valid() with { Capacity = null, AllowsOvernight = true, MaxDurationMinutes = 3 * 24 * 60 };
+
+        _requestValidator.TestValidate(request).ShouldNotHaveAnyValidationErrors();
+        _requestValidator.TestValidate(request with { AllowsOvernight = false })
+            .ShouldHaveValidationErrorFor(x => x.MaxDurationMinutes);
+        _requestValidator.TestValidate(request with { MaxDurationMinutes = 8 * 24 * 60 })
+            .ShouldHaveValidationErrorFor(x => x.MaxDurationMinutes);
+    }
+
+    [Fact]
+    public void Seat_placement_is_all_or_nothing()
+    {
+        var seat = Valid() with { Capacity = null, SpaceId = 1, SeatNumber = 7, SeatRow = 2, SeatColumn = 1 };
+
+        _requestValidator.TestValidate(seat).ShouldNotHaveAnyValidationErrors();
+        _requestValidator.TestValidate(seat with { SeatRow = null }).ShouldHaveValidationErrorFor("seat");
+        _requestValidator.TestValidate(seat with { SeatColumn = Space.MaxColumns + 1 }).ShouldHaveValidationErrorFor(x => x.SeatColumn);
+        _requestValidator.TestValidate(seat with { SeatNumber = 0 }).ShouldHaveValidationErrorFor(x => x.SeatNumber);
     }
 
     [Theory]
@@ -124,13 +148,15 @@ public class ResourceValidatorTests
         {
             Page = 0,
             MinCapacity = 0,
-            CategoryId = -1,
+            CategoryIds = [-1],
+            Kinds = [(ResourceKind)42],
             FeatureIds = Enumerable.Range(1, 21).ToArray(),
         });
 
         result.ShouldHaveValidationErrorFor(x => x.Page);
         result.ShouldHaveValidationErrorFor(x => x.MinCapacity);
-        result.ShouldHaveValidationErrorFor(x => x.CategoryId);
+        result.ShouldHaveValidationErrorFor("CategoryIds[0]");
+        result.ShouldHaveValidationErrorFor("Kinds[0]");
         result.ShouldHaveValidationErrorFor(x => x.FeatureIds);
     }
 

@@ -20,6 +20,9 @@ internal sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
         builder.HasIndex(c => c.Name).IsUnique().HasDatabaseName(NameIndexName);
 
         builder.Property(c => c.Description).HasMaxLength(Category.DescriptionMaxLength);
+
+        // Вид хранится текстом, как и все перечисления. У уже существующих категорий — Room (см. миграцию).
+        builder.Property(c => c.Kind).HasConversion<string>().HasMaxLength(20);
     }
 }
 
@@ -55,8 +58,28 @@ internal sealed class FeatureConfiguration : IEntityTypeConfiguration<Feature>
     }
 }
 
+internal sealed class SpaceConfiguration : IEntityTypeConfiguration<Space>
+{
+    public void Configure(EntityTypeBuilder<Space> builder)
+    {
+        builder.ToTable("spaces", table =>
+        {
+            table.HasCheckConstraint("ck_spaces_layout", "rows > 0 AND columns > 0");
+            table.HasCheckConstraint("ck_spaces_aisle", "aisle_after_column IS NULL OR (aisle_after_column > 0 AND aisle_after_column < columns)");
+        });
+
+        builder.Property(s => s.Name).HasMaxLength(Space.NameMaxLength).UseCollation(PostgresCollations.Russian);
+        builder.Property(s => s.Description).HasMaxLength(Space.DescriptionMaxLength);
+
+        builder.HasOne(s => s.Location).WithMany().HasForeignKey(s => s.LocationId).OnDelete(DeleteBehavior.Restrict);
+    }
+}
+
 internal sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
 {
+    public const string SeatNumberIndexName = "ix_resources_space_id_seat_number";
+    public const string SeatPositionIndexName = "ix_resources_space_id_seat_row_seat_column";
+
     public void Configure(EntityTypeBuilder<Resource> builder)
     {
         // CHECK-ограничения дублируют правила валидаторов на уровне базы:
@@ -66,11 +89,25 @@ internal sealed class ResourceConfiguration : IEntityTypeConfiguration<Resource>
             table.HasCheckConstraint("ck_resources_capacity_positive", "capacity IS NULL OR capacity > 0");
             table.HasCheckConstraint("ck_resources_working_hours", "close_time > open_time");
             table.HasCheckConstraint("ck_resources_max_duration_positive", "max_duration_minutes IS NULL OR max_duration_minutes > 0");
+
+            // Положение места на схеме задаётся целиком или не задаётся вовсе.
+            table.HasCheckConstraint(
+                "ck_resources_seat_complete",
+                "(space_id IS NULL AND seat_number IS NULL AND seat_row IS NULL AND seat_column IS NULL) "
+                + "OR (space_id IS NOT NULL AND seat_number > 0 AND seat_row > 0 AND seat_column > 0)");
         });
 
         builder.Property(r => r.Name).HasMaxLength(Resource.NameMaxLength).UseCollation(PostgresCollations.Russian);
         builder.Property(r => r.Description).HasMaxLength(Resource.DescriptionMaxLength);
         builder.Property(r => r.ImageUrl).HasMaxLength(Resource.ImageUrlMaxLength);
+        builder.Property(r => r.PickupInfo).HasMaxLength(Resource.PickupInfoMaxLength);
+        builder.Property(r => r.DeactivationReason).HasMaxLength(Resource.DeactivationReasonMaxLength);
+
+        // Коворкинг с местами удалить нельзя (Restrict → 409 in_use). Номер и позиция места уникальны в своём коворкинге;
+        // у остальных ресурсов space_id пуст, и для них индекс ничего не ограничивает: NULL с NULL не совпадают.
+        builder.HasOne(r => r.Space).WithMany().HasForeignKey(r => r.SpaceId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(r => new { r.SpaceId, r.SeatNumber }).IsUnique().HasDatabaseName(SeatNumberIndexName);
+        builder.HasIndex(r => new { r.SpaceId, r.SeatRow, r.SeatColumn }).IsUnique().HasDatabaseName(SeatPositionIndexName);
 
         // Restrict: категорию или корпус, в которых есть ресурсы, удалить нельзя — база вернёт ошибку,
         // а ConstraintErrors превратит её в 409 in_use.

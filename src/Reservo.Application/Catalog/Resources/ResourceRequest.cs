@@ -11,6 +11,8 @@ public sealed record ResourceRequest
     public const int MaxFloor = 100;
     public const int MinBookingLimitMinutes = 15;
     public const int MaxBookingLimitMinutes = 24 * 60;
+    public const int MaxOvernightLimitMinutes = 7 * 24 * 60;
+    public const int MaxSeatNumber = 999;
     public const int MaxFeatures = 30;
 
     /// <summary>Id категории.</summary>
@@ -56,6 +58,32 @@ public sealed record ResourceRequest
     /// <example>180</example>
     public int? MaxDurationMinutes { get; init; }
 
+    /// <summary>
+    /// Можно бронировать на ночь и на несколько дней (оборудование). Рабочие часы тогда — часы выдачи и возврата,
+    /// а лимит длительности — до 7 суток.
+    /// </summary>
+    /// <example>false</example>
+    public bool AllowsOvernight { get; init; }
+
+    /// <summary>Где и когда выдают и принимают оборудование, необязательно.</summary>
+    /// <example>Стойка информации, 1 этаж, 08:00–21:00</example>
+    public string? PickupInfo { get; init; }
+
+    /// <summary>Коворкинг — только для мест (категория вида <c>Seat</c>). Тогда обязательны и номер, ряд, колонка.</summary>
+    public int? SpaceId { get; init; }
+
+    /// <summary>Номер места в коворкинге.</summary>
+    public int? SeatNumber { get; init; }
+
+    /// <summary>Ряд места на схеме коворкинга, с 1.</summary>
+    public int? SeatRow { get; init; }
+
+    /// <summary>Колонка места на схеме коворкинга, с 1.</summary>
+    public int? SeatColumn { get; init; }
+
+    /// <summary>Заданы ли поля положения на схеме коворкинга (хотя бы одно).</summary>
+    internal bool HasSeatFields => SpaceId is not null || SeatNumber is not null || SeatRow is not null || SeatColumn is not null;
+
     /// <summary>Id оснащения. Пустой список — оснащения нет.</summary>
     /// <example>[1, 2]</example>
     public int[] FeatureIds { get; init; } = [];
@@ -72,7 +100,10 @@ public sealed record ResourceRequest
         RequiresApproval,
         OpenTime!.Value,
         CloseTime!.Value,
-        MaxDurationMinutes);
+        MaxDurationMinutes,
+        AllowsOvernight,
+        PickupInfo,
+        SpaceId is { } spaceId ? new SeatPlacement(spaceId, SeatNumber!.Value, SeatRow!.Value, SeatColumn!.Value) : null);
 }
 
 public sealed class ResourceRequestValidator : AbstractValidator<ResourceRequest>
@@ -115,7 +146,31 @@ public sealed class ResourceRequestValidator : AbstractValidator<ResourceRequest
 
         RuleFor(x => x.MaxDurationMinutes)
             .InclusiveBetween(ResourceRequest.MinBookingLimitMinutes, ResourceRequest.MaxBookingLimitMinutes)
-            .WithMessage($"Лимит длительности брони — от {ResourceRequest.MinBookingLimitMinutes} до {ResourceRequest.MaxBookingLimitMinutes} минут.");
+            .WithMessage($"Лимит длительности брони — от {ResourceRequest.MinBookingLimitMinutes} до {ResourceRequest.MaxBookingLimitMinutes} минут.")
+            .When(x => !x.AllowsOvernight);
+
+        RuleFor(x => x.MaxDurationMinutes)
+            .InclusiveBetween(ResourceRequest.MinBookingLimitMinutes, ResourceRequest.MaxOvernightLimitMinutes)
+            .WithMessage($"Лимит длительности брони на несколько дней — от {ResourceRequest.MinBookingLimitMinutes} до {ResourceRequest.MaxOvernightLimitMinutes} минут.")
+            .When(x => x.AllowsOvernight);
+
+        RuleFor(x => x.PickupInfo)
+            .MaximumLength(Resource.PickupInfoMaxLength)
+            .WithMessage($"Сведения о выдаче не длиннее {Resource.PickupInfoMaxLength} символов.");
+
+        // Положение места задаётся целиком или не задаётся вовсе.
+        RuleFor(x => x)
+            .Must(x => x.SpaceId is not null && x.SeatNumber is not null && x.SeatRow is not null && x.SeatColumn is not null)
+            .WithMessage("Для места в коворкинге укажите коворкинг, номер места, ряд и колонку.")
+            .WithName("seat")
+            .When(x => x.HasSeatFields);
+
+        RuleFor(x => x.SpaceId).GreaterThan(0).WithMessage("Id коворкинга должен быть положительным.");
+        RuleFor(x => x.SeatNumber)
+            .InclusiveBetween(1, ResourceRequest.MaxSeatNumber)
+            .WithMessage($"Номер места — от 1 до {ResourceRequest.MaxSeatNumber}.");
+        RuleFor(x => x.SeatRow).InclusiveBetween(1, Space.MaxRows).WithMessage($"Ряд — от 1 до {Space.MaxRows}.");
+        RuleFor(x => x.SeatColumn).InclusiveBetween(1, Space.MaxColumns).WithMessage($"Колонка — от 1 до {Space.MaxColumns}.");
 
         RuleFor(x => x.FeatureIds)
             .NotNull().WithMessage("Передайте список оснащения (можно пустой).")
@@ -135,7 +190,7 @@ public sealed record DeactivateResourceRequest
     // 400, а не 500: к причине добавляется «Ресурс выведен из эксплуатации: », а поле причины у брони — 500 символов.
     public const int ReasonMaxLength = 400;
 
-    /// <summary>Причина. Её увидят владельцы броней, которые отменятся из-за вывода ресурса.</summary>
+    /// <summary>Причина. Её увидят владельцы броней, которые отменятся из-за вывода ресурса, и все — на карточке ресурса.</summary>
     /// <example>Ремонт проектора до конца недели</example>
     public string Reason { get; init; } = string.Empty;
 }

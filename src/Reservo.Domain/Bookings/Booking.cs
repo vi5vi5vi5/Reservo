@@ -25,7 +25,7 @@ public class Booking
         int userId,
         DateTimeOffset startAt,
         DateTimeOffset endAt,
-        string title,
+        string? title,
         int? attendees,
         bool requiresApproval,
         DateTimeOffset now)
@@ -54,8 +54,8 @@ public class Booking
     /// <summary>Конец (не включительно), UTC.</summary>
     public DateTimeOffset EndAt { get; private set; }
 
-    /// <summary>Тема или цель брони.</summary>
-    public string Title { get; private set; } = null!;
+    /// <summary>Тема или цель брони. Для места в коворкинге необязательна.</summary>
+    public string? Title { get; private set; }
 
     public int? Attendees { get; private set; }
 
@@ -75,7 +75,7 @@ public class Booking
     /// Меняет время, тему и число участников. Если у ресурса с согласованием перенесли время
     /// подтверждённой брони, она снова уходит на согласование (BR-14).
     /// </summary>
-    public void Update(DateTimeOffset startAt, DateTimeOffset endAt, string title, int? attendees, bool requiresApproval, DateTimeOffset now)
+    public void Update(DateTimeOffset startAt, DateTimeOffset endAt, string? title, int? attendees, bool requiresApproval, DateTimeOffset now)
     {
         EnsureActive();
 
@@ -121,12 +121,12 @@ public class Booking
     /// <summary>Напоминание отправлено — второй раз фоновая задача его не пошлёт.</summary>
     public void MarkReminderSent(DateTimeOffset now) => ReminderSentAt = now;
 
-    private void SetDetails(DateTimeOffset startAt, DateTimeOffset endAt, string title, int? attendees)
+    private void SetDetails(DateTimeOffset startAt, DateTimeOffset endAt, string? title, int? attendees)
     {
         // В базе время хранится только в UTC: Npgsql и не примет другое смещение.
         StartAt = startAt.ToUniversalTime();
         EndAt = endAt.ToUniversalTime();
-        Title = title.Trim();
+        Title = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
         Attendees = attendees;
     }
 

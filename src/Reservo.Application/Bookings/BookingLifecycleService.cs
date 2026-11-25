@@ -105,6 +105,9 @@ public sealed class BookingLifecycleService(
         {
             booking.MarkReminderSent(now);
             notifications.Add(BookingNotifications.Reminder(booking, booking.Resource.Name, policy, now));
+
+            // В журнал — чтобы в истории брони было видно «Напоминание отправлено».
+            db.AuditLogs.Add(AuditEntries.ForBooking(null, AuditAction.BookingReminderSent, booking.Id, null, now));
         }
 
         // Напоминание не меняет расписание, поэтому scheduleChanged здесь не нужен.

@@ -44,16 +44,24 @@ public sealed record ResourceScheduleDto(
     TimeOnly CloseTime,
     IReadOnlyList<ScheduleItemDto> Items);
 
+/// <summary>Ресурс, свободный на весь запрошенный интервал.</summary>
+/// <param name="Resource">Ресурс.</param>
+/// <param name="FreeUntil">
+/// До какого момента ресурс свободен после конца интервала: до начала следующей брони или до закрытия в этот день.
+/// Пусто — у ресурса на несколько дней дальше броней нет. Нужен для подсказок «свободно до 17:00 — можно продлить».
+/// </param>
+public sealed record AvailableResourceDto(ResourceDto Resource, DateTimeOffset? FreeUntil);
+
 public interface IAvailabilityService
 {
-    Task<PagedResult<ResourceDto>> GetAvailableResourcesAsync(AvailableResourcesQuery query, CancellationToken cancellationToken);
+    Task<PagedResult<AvailableResourceDto>> GetAvailableResourcesAsync(AvailableResourcesQuery query, CancellationToken cancellationToken);
 
     Task<ResourceScheduleDto> GetScheduleAsync(int resourceId, ScheduleQuery query, CancellationToken cancellationToken);
 }
 
 public sealed class AvailabilityService(IAppDbContext db, ICurrentUser currentUser, BookingPolicy policy) : IAvailabilityService
 {
-    public async Task<PagedResult<ResourceDto>> GetAvailableResourcesAsync(AvailableResourcesQuery query, CancellationToken cancellationToken)
+    public async Task<PagedResult<AvailableResourceDto>> GetAvailableResourcesAsync(AvailableResourcesQuery query, CancellationToken cancellationToken)
     {
         var from = query.From!.Value.ToUniversalTime();
         var to = query.To!.Value.ToUniversalTime();
@@ -71,20 +79,59 @@ public sealed class AvailabilityService(IAppDbContext db, ICurrentUser currentUs
         var minutes = (int)Math.Ceiling((to - from).TotalMinutes);
         resources = resources.Where(r => (r.MaxDurationMinutes ?? policy.DefaultMaxDurationMinutes) >= minutes);
 
-        // 3. Интервал в рабочих часах ресурса (BR-06). Проверяется, когда интервал — в пределах одного местного дня;
-        //    многодневный интервал забронировать одной бронью всё равно нельзя, и для него важна только занятость.
+        // 3. Рабочие часы (BR-06), то же правило, что в BookingRules.CheckWorkingHours, но в SQL.
+        //    Обычный ресурс: интервал целиком в часах одного дня. Ресурс «на ночь»: в часах только начало и конец.
         var localFrom = policy.ToLocal(from);
         var localTo = policy.ToLocal(to);
-        if (localFrom.Date == localTo.Date)
-        {
-            var openNeeded = TimeOnly.FromTimeSpan(localFrom.TimeOfDay);
-            var closeNeeded = TimeOnly.FromTimeSpan(localTo.TimeOfDay);
-            resources = resources.Where(r => r.OpenTime <= openNeeded && r.CloseTime >= closeNeeded);
-        }
+        var sameDay = localFrom.Date == localTo.Date;
+        var startTime = TimeOnly.FromTimeSpan(localFrom.TimeOfDay);
+        var endTime = TimeOnly.FromTimeSpan(localTo.TimeOfDay);
 
-        return await ResourceQueries.ApplySorting(resources, query)
+        resources = resources.Where(r =>
+            (!r.AllowsOvernight && sameDay && r.OpenTime <= startTime && r.CloseTime >= endTime)
+            || (r.AllowsOvernight && r.OpenTime <= startTime && r.CloseTime > startTime && r.OpenTime <= endTime && r.CloseTime >= endTime));
+
+        var page = await ResourceQueries.ApplySorting(resources, query)
             .Select(ResourceMappings.ToDto)
             .ToPagedResultAsync(query, cancellationToken);
+
+        var freeUntil = await FreeUntilAsync(page.Items, to, cancellationToken);
+
+        return new PagedResult<AvailableResourceDto>(
+            page.Items.Select(r => new AvailableResourceDto(r, freeUntil[r.Id])).ToList(),
+            page.Page,
+            page.PageSize,
+            page.TotalCount);
+    }
+
+    /// <summary>
+    /// Для каждого ресурса — до какого момента он свободен после <paramref name="after"/>: до ближайшей активной брони
+    /// или, у обычного ресурса, до закрытия в тот же местный день. Один запрос на всю страницу.
+    /// </summary>
+    internal async Task<Dictionary<int, DateTimeOffset?>> FreeUntilAsync(
+        IReadOnlyCollection<ResourceDto> resources, DateTimeOffset after, CancellationToken cancellationToken)
+    {
+        var ids = resources.Select(r => r.Id).ToArray();
+        var nextStarts = await db.Bookings
+            .AsNoTracking()
+            .Where(b => ids.Contains(b.ResourceId)
+                        && (b.Status == BookingStatus.Pending || b.Status == BookingStatus.Confirmed)
+                        && b.StartAt >= after)
+            .GroupBy(b => b.ResourceId)
+            .Select(g => new { ResourceId = g.Key, Next = g.Min(b => b.StartAt) })
+            .ToDictionaryAsync(x => x.ResourceId, x => x.Next, cancellationToken);
+
+        return resources.ToDictionary(r => r.Id, r =>
+        {
+            DateTimeOffset? next = nextStarts.TryGetValue(r.Id, out var start) ? start : null;
+            if (r.AllowsOvernight)
+            {
+                return next;
+            }
+
+            var close = policy.AtLocal(policy.ToLocal(after).Date, r.CloseTime);
+            return next is { } n && n < close ? n : close;
+        });
     }
 
     public async Task<ResourceScheduleDto> GetScheduleAsync(int resourceId, ScheduleQuery query, CancellationToken cancellationToken)

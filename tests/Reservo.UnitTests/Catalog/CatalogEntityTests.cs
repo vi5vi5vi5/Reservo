@@ -23,7 +23,7 @@ public class CatalogEntityTests
     [Fact]
     public void Category_code_is_trimmed_and_lowercased()
     {
-        var category = new Category("  Meeting-Room ", " Переговорные ", null);
+        var category = new Category("  Meeting-Room ", " Переговорные ", null, ResourceKind.Room);
 
         Assert.Equal("meeting-room", category.Code);
         Assert.Equal("Переговорные", category.Name);
@@ -32,7 +32,7 @@ public class CatalogEntityTests
     [Fact]
     public void Blank_optional_text_becomes_null()
     {
-        var category = new Category("lab", "Лаборатории", "   ");
+        var category = new Category("lab", "Лаборатории", "   ", ResourceKind.Room);
         var location = new Location("Технопарк", "");
 
         Assert.Null(category.Description);
@@ -70,12 +70,14 @@ public class CatalogEntityTests
     {
         var resource = new Resource(Details(), Created);
 
-        resource.Deactivate(Later);
+        resource.Deactivate("  Ремонт до пятницы ", Later);
         Assert.False(resource.IsActive);
+        Assert.Equal("Ремонт до пятницы", resource.DeactivationReason);
         Assert.Equal(Later, resource.UpdatedAt);
 
         resource.Activate(Later.AddHours(1));
         Assert.True(resource.IsActive);
+        Assert.Null(resource.DeactivationReason);
     }
 
     [Fact]

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
+using Reservo.Application.Admin;
 using Reservo.Application.Audit;
 using Reservo.Application.Auth;
 using Reservo.Application.Bookings;
@@ -7,6 +8,7 @@ using Reservo.Application.Catalog.Categories;
 using Reservo.Application.Catalog.Features;
 using Reservo.Application.Catalog.Locations;
 using Reservo.Application.Catalog.Resources;
+using Reservo.Application.Catalog.Spaces;
 using Reservo.Application.Notifications;
 using Reservo.Application.Users;
 
@@ -23,9 +25,12 @@ public static class DependencyInjection
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IFeatureService, FeatureService>();
         services.AddScoped<IResourceService, ResourceService>();
+        services.AddScoped<ISpaceService, SpaceService>();
 
         services.AddScoped<IBookingService, BookingService>();
         services.AddScoped<IAvailabilityService, AvailabilityService>();
+        services.AddScoped<IBookingSuggestionService, BookingSuggestionService>();
+        services.AddScoped<IAdminStatsService, AdminStatsService>();
         services.AddScoped<IBookingLifecycleService, BookingLifecycleService>();
 
         services.AddScoped<IAuditService, AuditService>();

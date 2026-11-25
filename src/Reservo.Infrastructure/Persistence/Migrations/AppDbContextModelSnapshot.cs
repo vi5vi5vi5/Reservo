@@ -120,7 +120,6 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                         .HasColumnName("status_reason");
 
                     b.Property<string>("Title")
-                        .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("title");
@@ -178,6 +177,12 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -276,6 +281,10 @@ namespace Reservo.Infrastructure.Persistence.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<bool>("AllowsOvernight")
+                        .HasColumnType("boolean")
+                        .HasColumnName("allows_overnight");
+
                     b.Property<int?>("Capacity")
                         .HasColumnType("integer")
                         .HasColumnName("capacity");
@@ -291,6 +300,11 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("DeactivationReason")
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("deactivation_reason");
 
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
@@ -329,9 +343,30 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                         .HasColumnType("time without time zone")
                         .HasColumnName("open_time");
 
+                    b.Property<string>("PickupInfo")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("pickup_info");
+
                     b.Property<bool>("RequiresApproval")
                         .HasColumnType("boolean")
                         .HasColumnName("requires_approval");
+
+                    b.Property<int?>("SeatColumn")
+                        .HasColumnType("integer")
+                        .HasColumnName("seat_column");
+
+                    b.Property<int?>("SeatNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("seat_number");
+
+                    b.Property<int?>("SeatRow")
+                        .HasColumnType("integer")
+                        .HasColumnName("seat_row");
+
+                    b.Property<int?>("SpaceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("space_id");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -346,13 +381,90 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                     b.HasIndex("LocationId")
                         .HasDatabaseName("ix_resources_location_id");
 
+                    b.HasIndex("SpaceId", "SeatNumber")
+                        .IsUnique()
+                        .HasDatabaseName("ix_resources_space_id_seat_number");
+
+                    b.HasIndex("SpaceId", "SeatRow", "SeatColumn")
+                        .IsUnique()
+                        .HasDatabaseName("ix_resources_space_id_seat_row_seat_column");
+
                     b.ToTable("resources", null, t =>
                         {
                             t.HasCheckConstraint("ck_resources_capacity_positive", "capacity IS NULL OR capacity > 0");
 
                             t.HasCheckConstraint("ck_resources_max_duration_positive", "max_duration_minutes IS NULL OR max_duration_minutes > 0");
 
+                            t.HasCheckConstraint("ck_resources_seat_complete", "(space_id IS NULL AND seat_number IS NULL AND seat_row IS NULL AND seat_column IS NULL) OR (space_id IS NOT NULL AND seat_number > 0 AND seat_row > 0 AND seat_column > 0)");
+
                             t.HasCheckConstraint("ck_resources_working_hours", "close_time > open_time");
+                        });
+                });
+
+            modelBuilder.Entity("Reservo.Domain.Catalog.Space", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int?>("AisleAfterColumn")
+                        .HasColumnType("integer")
+                        .HasColumnName("aisle_after_column");
+
+                    b.Property<int>("Columns")
+                        .HasColumnType("integer")
+                        .HasColumnName("columns");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<int?>("Floor")
+                        .HasColumnType("integer")
+                        .HasColumnName("floor");
+
+                    b.Property<bool>("IsQuiet")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_quiet");
+
+                    b.Property<int>("LocationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("location_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("name")
+                        .UseCollation("ru-RU-x-icu");
+
+                    b.Property<int>("Rows")
+                        .HasColumnType("integer")
+                        .HasColumnName("rows");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_spaces");
+
+                    b.HasIndex("LocationId")
+                        .HasDatabaseName("ix_spaces_location_id");
+
+                    b.ToTable("spaces", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_spaces_aisle", "aisle_after_column IS NULL OR (aisle_after_column > 0 AND aisle_after_column < columns)");
+
+                            t.HasCheckConstraint("ck_spaces_layout", "rows > 0 AND columns > 0");
                         });
                 });
 
@@ -577,7 +689,27 @@ namespace Reservo.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_resources_locations_location_id");
 
+                    b.HasOne("Reservo.Domain.Catalog.Space", "Space")
+                        .WithMany()
+                        .HasForeignKey("SpaceId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_resources_spaces_space_id");
+
                     b.Navigation("Category");
+
+                    b.Navigation("Location");
+
+                    b.Navigation("Space");
+                });
+
+            modelBuilder.Entity("Reservo.Domain.Catalog.Space", b =>
+                {
+                    b.HasOne("Reservo.Domain.Catalog.Location", "Location")
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_spaces_locations_location_id");
 
                     b.Navigation("Location");
                 });

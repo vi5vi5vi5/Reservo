@@ -71,23 +71,47 @@ public static class BookingRules
     public static int MaxDurationMinutes(Resource resource, BookingPolicy policy) =>
         resource.MaxDurationMinutes ?? policy.DefaultMaxDurationMinutes;
 
-    /// <summary>BR-06: бронь целиком в рабочих часах ресурса и в пределах одного дня — по местному времени площадки.</summary>
+    /// <summary>
+    /// BR-06, по местному времени площадки. Обычный ресурс: бронь целиком в рабочих часах одного дня.
+    /// Ресурс с <see cref="Resource.AllowsOvernight"/> (оборудование «на ночь», «на 3 дня»): рабочие часы — это часы выдачи
+    /// и возврата, поэтому в них попадают начало и конец брони, а между ними может пройти ночь или несколько дней.
+    /// </summary>
     public static DomainError? CheckWorkingHours(DateTimeOffset startAt, DateTimeOffset endAt, Resource resource, BookingPolicy policy)
     {
         var localStart = policy.ToLocal(startAt);
         var localEnd = policy.ToLocal(endAt);
+        var start = TimeOnly.FromTimeSpan(localStart.TimeOfDay);
+        var end = TimeOnly.FromTimeSpan(localEnd.TimeOfDay);
+        var hours = $"с {Format(resource.OpenTime)} до {Format(resource.CloseTime)}";
 
-        var fits = localStart.Date == localEnd.Date
-                   && TimeOnly.FromTimeSpan(localStart.TimeOfDay) >= resource.OpenTime
-                   && TimeOnly.FromTimeSpan(localEnd.TimeOfDay) <= resource.CloseTime;
+        if (resource.AllowsOvernight)
+        {
+            // Выдать в момент закрытия уже некому, а вернуть в момент открытия — можно.
+            var startFits = start >= resource.OpenTime && start < resource.CloseTime;
+            var endFits = end >= resource.OpenTime && end <= resource.CloseTime;
+
+            return startFits && endFits
+                ? null
+                : new DomainError(
+                    "booking.outside_working_hours",
+                    $"{resource.Name}: выдача и возврат — {hours}. Начало и конец брони должны попадать в эти часы, "
+                    + "а сама бронь может длиться ночь или несколько дней.");
+        }
+
+        var fits = localStart.Date == localEnd.Date && start >= resource.OpenTime && end <= resource.CloseTime;
 
         return fits
             ? null
             : new DomainError(
                 "booking.outside_working_hours",
-                $"{resource.Name} работает с {Format(resource.OpenTime)} до {Format(resource.CloseTime)}. "
-                + "Бронь должна целиком укладываться в эти часы одного дня.");
+                $"{resource.Name} работает {hours}. Бронь должна целиком укладываться в эти часы одного дня.");
     }
+
+    /// <summary>Тема обязательна для всего, кроме места в коворкинге: «посидеть с ноутбуком» объяснять не нужно.</summary>
+    public static DomainError? CheckTitle(string? title, ResourceKind kind) =>
+        kind == ResourceKind.Seat || !string.IsNullOrWhiteSpace(title)
+            ? null
+            : new DomainError("validation_failed", "Укажите тему брони — например, «Подготовка к защите проекта».");
 
     /// <summary>BR-07: ресурс не выведен из эксплуатации.</summary>
     public static DomainError? CheckResourceActive(Resource resource) =>

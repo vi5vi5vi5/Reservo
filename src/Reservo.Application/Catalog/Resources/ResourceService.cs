@@ -63,7 +63,7 @@ public sealed class ResourceService(
         // Ресурс и запись журнала — одной транзакцией: журналу нужен id ресурса, который выдаёт база при сохранении.
         var resourceId = await db.ExecuteInTransactionAsync(async ct =>
         {
-            await EnsureCategoryAndLocationExistAsync(request, ct);
+            await EnsureReferencesAsync(request, ct);
             var features = await LoadFeaturesAsync(request.FeatureIds, ct);
 
             var resource = new Resource(request.ToDetails(), now);
@@ -89,7 +89,7 @@ public sealed class ResourceService(
             .SingleOrDefaultAsync(r => r.Id == id, cancellationToken)
             ?? throw NotFound();
 
-        await EnsureCategoryAndLocationExistAsync(request, cancellationToken);
+        await EnsureReferencesAsync(request, cancellationToken);
         var features = await LoadFeaturesAsync(request.FeatureIds, cancellationToken);
 
         var before = Snapshot(resource);
@@ -109,6 +109,9 @@ public sealed class ResourceService(
             ("maxDurationMinutes", before.MaxDurationMinutes, after.MaxDurationMinutes),
             ("imageUrl", before.ImageUrl, after.ImageUrl),
             ("description", before.Description, after.Description),
+            ("allowsOvernight", before.AllowsOvernight, after.AllowsOvernight),
+            ("pickupInfo", before.PickupInfo, after.PickupInfo),
+            ("seat", before.Seat, after.Seat),
             ("features", before.Features, after.Features)), timeProvider.GetUtcNow()));
 
         await db.SaveChangesAsync(cancellationToken);
@@ -129,7 +132,7 @@ public sealed class ResourceService(
         var actorId = currentUser.Id;
         var reason = $"Ресурс выведен из эксплуатации: {request.Reason.Trim()}";
 
-        resource.Deactivate(now);
+        resource.Deactivate(request.Reason, now);
 
         // BR-15: все активные брони, которые ещё не закончились, отменяются; владельцы получают уведомления.
         var affected = await db.Bookings
@@ -180,27 +183,65 @@ public sealed class ResourceService(
     /// <summary>Снимок полей для журнала: что было до изменения и что стало после.</summary>
     private static ResourceSnapshot Snapshot(Resource r) => new(
         r.Name, r.CategoryId, r.LocationId, r.Floor, r.Capacity, r.RequiresApproval, r.OpenTime, r.CloseTime,
-        r.MaxDurationMinutes, r.ImageUrl, r.Description,
+        r.MaxDurationMinutes, r.ImageUrl, r.Description, r.AllowsOvernight, r.PickupInfo,
+        r.SpaceId is null ? null : $"коворкинг {r.SpaceId}, место {r.SeatNumber}, ряд {r.SeatRow}, колонка {r.SeatColumn}",
         // Список оснащения сравнивается строкой «1,2,5»: массивы сравнивались бы по ссылке, а не по содержимому.
         string.Join(",", r.Features.Select(f => f.Id).Order()));
 
     private sealed record ResourceSnapshot(
         string Name, int CategoryId, int LocationId, int? Floor, int? Capacity, bool RequiresApproval, TimeOnly OpenTime,
-        TimeOnly CloseTime, int? MaxDurationMinutes, string? ImageUrl, string? Description, string Features);
+        TimeOnly CloseTime, int? MaxDurationMinutes, string? ImageUrl, string? Description, bool AllowsOvernight,
+        string? PickupInfo, string? Seat, string Features);
 
     private async Task<Resource> FindAsync(int id, CancellationToken cancellationToken) =>
         await db.Resources.FindAsync([id], cancellationToken) ?? throw NotFound();
 
-    private async Task EnsureCategoryAndLocationExistAsync(ResourceRequest request, CancellationToken cancellationToken)
+    /// <summary>
+    /// Категория и корпус существуют, а положение на схеме коворкинга согласовано с видом категории:
+    /// у места (вид Seat) оно обязательно и укладывается в схему зала, у остальных ресурсов его нет.
+    /// </summary>
+    private async Task EnsureReferencesAsync(ResourceRequest request, CancellationToken cancellationToken)
     {
-        if (!await db.Categories.AnyAsync(c => c.Id == request.CategoryId, cancellationToken))
-        {
-            throw CommonErrors.ReferenceNotFound($"Категория с id {request.CategoryId} не найдена.");
-        }
+        var kind = await db.Categories
+            .Where(c => c.Id == request.CategoryId)
+            .Select(c => (ResourceKind?)c.Kind)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw CommonErrors.ReferenceNotFound($"Категория с id {request.CategoryId} не найдена.");
 
         if (!await db.Locations.AnyAsync(l => l.Id == request.LocationId, cancellationToken))
         {
             throw CommonErrors.ReferenceNotFound($"Корпус с id {request.LocationId} не найден.");
+        }
+
+        if (kind != ResourceKind.Seat)
+        {
+            if (request.HasSeatFields)
+            {
+                throw CatalogErrors.SeatPlacementNotAllowed();
+            }
+
+            return;
+        }
+
+        if (request.SpaceId is not { } spaceId)
+        {
+            throw CatalogErrors.SeatPlacementRequired();
+        }
+
+        if (request.AllowsOvernight)
+        {
+            throw CatalogErrors.SeatCannotBeOvernight();
+        }
+
+        var layout = await db.Spaces
+            .Where(s => s.Id == spaceId)
+            .Select(s => new { s.Rows, s.Columns })
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw CommonErrors.ReferenceNotFound($"Коворкинг с id {spaceId} не найден.");
+
+        if (request.SeatRow > layout.Rows || request.SeatColumn > layout.Columns)
+        {
+            throw CatalogErrors.SeatOutsideLayout(layout.Rows, layout.Columns);
         }
     }
 

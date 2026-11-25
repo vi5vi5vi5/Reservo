@@ -9,8 +9,11 @@ namespace Reservo.Application.Bookings;
 /// <summary>Фильтры списка броней.</summary>
 public class BookingListQuery : PagedQuery
 {
-    /// <summary>Только брони в этом статусе.</summary>
-    public BookingStatus? Status { get; init; }
+    /// <summary>
+    /// Только брони в этих статусах: <c>status=Cancelled&amp;status=Rejected</c>. Например, «предстоящие» — это
+    /// <c>status=Pending&amp;status=Confirmed&amp;from=сейчас</c>, «прошедшие» — <c>status=Completed</c> с <c>sortDir=Desc</c>.
+    /// </summary>
+    public BookingStatus[] Status { get; init; } = [];
 
     /// <summary>Только брони, которые заканчиваются позже этого момента. Например, <c>from</c> = сейчас — предстоящие и идущие.</summary>
     public DateTimeOffset? From { get; init; }
@@ -30,6 +33,9 @@ public sealed class AdminBookingListQuery : BookingListQuery
 
     /// <summary>Только брони этого пользователя.</summary>
     public int? UserId { get; init; }
+
+    /// <summary>Поиск по названию ресурса, имени и email владельца, без учёта регистра.</summary>
+    public string? Search { get; init; }
 }
 
 /// <summary>Поиск ресурсов, свободных на весь интервал, плюс все фильтры каталога.</summary>
@@ -58,6 +64,8 @@ public sealed class BookingListQueryValidator : AbstractValidator<BookingListQue
     {
         Include(new PagedQueryValidator());
 
+        RuleForEach(x => x.Status).IsInEnum().WithMessage("Неизвестный статус брони.");
+
         RuleFor(x => x.To)
             .Must((query, to) => to > query.From).WithMessage("Конец интервала должен быть позже начала.")
             .When(x => x.From is not null && x.To is not null);
@@ -72,6 +80,7 @@ public sealed class AdminBookingListQueryValidator : AbstractValidator<AdminBook
 
         RuleFor(x => x.ResourceId).GreaterThan(0).WithMessage("Id ресурса должен быть положительным.");
         RuleFor(x => x.UserId).GreaterThan(0).WithMessage("Id пользователя должен быть положительным.");
+        RuleFor(x => x.Search).MaximumLength(100).WithMessage("Строка поиска не длиннее 100 символов.");
     }
 }
 

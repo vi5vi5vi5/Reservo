@@ -19,6 +19,7 @@ public enum AuditAction
     BookingRejected,
     BookingCancelled,
     BookingCompleted,
+    BookingReminderSent,
 }
 
 /// <summary>С какой сущностью произошло. Строки, а не перечисление: так записи в базе читаемы и фильтровать по ним просто.</summary>

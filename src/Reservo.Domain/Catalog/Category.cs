@@ -1,6 +1,6 @@
 namespace Reservo.Domain.Catalog;
 
-/// <summary>Категория ресурсов: «Переговорные», «Лаборатории» и т. п.</summary>
+/// <summary>Категория ресурсов: «Переговорные», «Лаборатории», «Ноутбуки» и т. п.</summary>
 public class Category
 {
     public const int CodeMaxLength = 50;
@@ -12,7 +12,7 @@ public class Category
     {
     }
 
-    public Category(string code, string name, string? description) => Update(code, name, description);
+    public Category(string code, string name, string? description, ResourceKind kind) => Update(code, name, description, kind);
 
     public int Id { get; private set; }
 
@@ -23,10 +23,14 @@ public class Category
 
     public string? Description { get; private set; }
 
-    public void Update(string code, string name, string? description)
+    /// <summary>Вид ресурсов категории: помещения, места в коворкинге или оборудование.</summary>
+    public ResourceKind Kind { get; private set; }
+
+    public void Update(string code, string name, string? description, ResourceKind kind)
     {
         Code = CatalogText.NormalizeCode(code);
         Name = name.Trim();
         Description = CatalogText.NullIfBlank(description);
+        Kind = kind;
     }
 }

@@ -27,6 +27,13 @@ public sealed record BookingPolicy(
     /// <summary>Переводит момент времени в местное время площадки.</summary>
     public DateTimeOffset ToLocal(DateTimeOffset moment) => TimeZoneInfo.ConvertTime(moment, TimeZone);
 
+    /// <summary>Местные дата и время площадки → момент времени в UTC.</summary>
+    public DateTimeOffset AtLocal(DateTime localDate, TimeOnly time)
+    {
+        var local = DateTime.SpecifyKind(localDate.Date.Add(time.ToTimeSpan()), DateTimeKind.Unspecified);
+        return new DateTimeOffset(local, TimeZone.GetUtcOffset(local)).ToUniversalTime();
+    }
+
     /// <summary>«25 октября с 14:00 до 15:00» по местному времени площадки — для сообщений и уведомлений.</summary>
     public string DescribeInterval(DateTimeOffset from, DateTimeOffset to)
     {

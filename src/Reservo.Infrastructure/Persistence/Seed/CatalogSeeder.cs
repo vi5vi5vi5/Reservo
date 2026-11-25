@@ -14,6 +14,13 @@ internal static class CatalogSeeder
     private static readonly TimeOnly MainClose = new(21, 0);
     private static readonly TimeOnly LabOpen = new(9, 0);
     private static readonly TimeOnly LabClose = new(20, 0);
+    private static readonly TimeOnly CoworkingOpen = new(8, 0);
+    private static readonly TimeOnly CoworkingClose = new(22, 0);
+    private static readonly TimeOnly LibraryOpen = new(9, 0);
+    private static readonly TimeOnly LibraryClose = new(21, 0);
+
+    /// <summary>Место в коворкинге можно занять максимум на 8 часов.</summary>
+    private const int SeatMaxMinutes = 480;
 
     private sealed record ResourceSeed(
         string Name,
@@ -26,7 +33,32 @@ internal static class CatalogSeeder
         TimeOnly Close,
         int? MaxDurationMinutes,
         string Description,
-        string[] Features);
+        string[] Features,
+        bool AllowsOvernight = false,
+        string? PickupInfo = null);
+
+    /// <summary>Коворкинг: места нумеруются по рядам слева направо, в первых рядах — компьютеры, первый ряд у окна.</summary>
+    private sealed record SpaceSeed(
+        string Name,
+        string ShortName,
+        string Location,
+        int Floor,
+        bool IsQuiet,
+        int Rows,
+        int Columns,
+        int AisleAfterColumn,
+        int RowsWithComputers,
+        TimeOnly Open,
+        TimeOnly Close,
+        string Description);
+
+    private static readonly SpaceSeed[] Spaces =
+    [
+        new("Коворкинг «Точка»", "«Точка»", "Главный корпус", 1, false, 4, 6, 3, 3, CoworkingOpen, CoworkingClose,
+            "Открытый коворкинг у главного входа. Можно говорить вполголоса."),
+        new("Коворкинг в библиотеке", "Библиотека", "Корпус Б", 2, true, 3, 6, 3, 1, LibraryOpen, LibraryClose,
+            "Тихая зона: без звонков и разговоров."),
+    ];
 
     private static readonly ResourceSeed[] Resources =
     [
@@ -55,14 +87,19 @@ internal static class CatalogSeeder
         new("Лаборатория электроники", "lab", "Технопарк", 1, 12, false, LabOpen, LabClose, null,
             "Паяльные станции, осциллографы, макетные платы.", ["computers"]),
 
-        new("3D-принтер Prusa MK4", "equipment", "Технопарк", 1, null, true, LabOpen, LabClose, 480,
-            "Печать пластиком PLA и PETG. Брони подтверждает администратор.", []),
-        new("Проектор Epson #2", "equipment", "Главный корпус", 1, null, false, MainOpen, MainClose, 480,
-            "Переносной проектор. Выдаётся на стойке информации, 1 этаж.", []),
-        new("Камера Sony для видеосъёмки", "equipment", "Главный корпус", 1, null, false, MainOpen, MainClose, 480,
-            "Камера со штативом и петличным микрофоном.", []),
-        new("Ноутбук MacBook Pro #1", "equipment", "Корпус Б", 1, null, false, MainOpen, MainClose, 480,
-            "Ноутбук для презентаций и монтажа видео.", []),
+        new("3D-принтер Prusa MK4", "3d-printers", "Технопарк", 1, null, true, LabOpen, LabClose, 2880,
+            "Печатает PLA и PETG. Печать можно оставить на ночь: корпус закрыт, принтер работает сам. Брони подтверждает администратор.",
+            [], AllowsOvernight: true,
+            PickupInfo: "Запуск печати и выдача деталей — Технопарк, 1 этаж, 09:00–20:00. Ночью принтер работает без присмотра."),
+        new("Проектор Epson #2", "projectors", "Главный корпус", 1, null, false, MainOpen, MainClose, 480,
+            "Переносной проектор с кабелем HDMI.", [],
+            PickupInfo: "Стойка информации, Главный корпус, 1 этаж, 08:00–21:00."),
+        new("Камера Sony для видеосъёмки", "cameras", "Главный корпус", 1, null, false, MainOpen, MainClose, 4320,
+            "Камера со штативом и петличным микрофоном.", [], AllowsOvernight: true,
+            PickupInfo: "Выдача и возврат — стойка информации, Главный корпус, 1 этаж, 08:00–21:00."),
+        new("Ноутбук MacBook Pro #1", "laptops", "Корпус Б", 1, null, false, MainOpen, MainClose, 4320,
+            "Ноутбук для презентаций и монтажа видео.", [], AllowsOvernight: true,
+            PickupInfo: "Выдача и возврат — стойка информации, Корпус Б, 1 этаж, 08:00–21:00."),
     ];
 
     public static async Task SeedAsync(AppDbContext db, TimeProvider timeProvider, ILogger logger, CancellationToken cancellationToken)
@@ -84,8 +121,8 @@ internal static class CatalogSeeder
         });
 
         logger.LogInformation(
-            "Добавлен демо-каталог: {Resources} ресурсов в {Categories} категориях",
-            Resources.Length, Resources.Select(r => r.Category).Distinct().Count());
+            "Добавлен демо-каталог: {Resources} ресурсов и {Spaces} коворкинга с {Seats} местами",
+            Resources.Length, Spaces.Length, Spaces.Sum(s => s.Rows * s.Columns));
     }
 
     private static async Task AddCatalogAsync(AppDbContext db, TimeProvider timeProvider, CancellationToken cancellationToken)
@@ -93,10 +130,15 @@ internal static class CatalogSeeder
 
         Category[] categories =
         [
-            new("meeting-room", "Переговорные", "Комнаты для встреч и командной работы"),
-            new("classroom", "Аудитории", "Учебные аудитории и лекционные залы"),
-            new("lab", "Лаборатории", "Специализированные лаборатории"),
-            new("equipment", "Оборудование", "Техника, которую можно взять на время"),
+            // Порядок важен: id 1–3 у помещений используют .http-файлы со сценариями.
+            new("meeting-room", "Переговорные", "Комнаты для встреч и командной работы", ResourceKind.Room),
+            new("classroom", "Аудитории", "Учебные аудитории и лекционные залы", ResourceKind.Room),
+            new("lab", "Лаборатории", "Специализированные лаборатории", ResourceKind.Room),
+            new("coworking", "Места в коворкинге", "Рабочие места в открытых пространствах", ResourceKind.Seat),
+            new("projectors", "Проекторы", "Переносные проекторы", ResourceKind.Equipment),
+            new("3d-printers", "3D-принтеры", "Печать деталей и прототипов", ResourceKind.Equipment),
+            new("laptops", "Ноутбуки", "Ноутбуки на время", ResourceKind.Equipment),
+            new("cameras", "Камеры", "Фото- и видеотехника", ResourceKind.Equipment),
         ];
 
         Location[] locations =
@@ -116,6 +158,7 @@ internal static class CatalogSeeder
             new("audio-system", "Звуковая система"),
             new("air-conditioning", "Кондиционер"),
             new("accessible", "Доступная среда"),
+            new("window", "У окна"),
         ];
 
         db.Categories.AddRange(categories);
@@ -144,11 +187,61 @@ internal static class CatalogSeeder
                     seed.RequiresApproval,
                     seed.Open,
                     seed.Close,
-                    seed.MaxDurationMinutes),
+                    seed.MaxDurationMinutes,
+                    seed.AllowsOvernight,
+                    seed.PickupInfo),
                 now);
 
             resource.SetFeatures(seed.Features.Select(code => featureByCode[code]));
             db.Resources.Add(resource);
+        }
+
+        // Коворкинги сохраняются отдельно: местам нужен их id.
+        var spaces = Spaces.ToDictionary(seed => seed, seed => new Space(
+            new SpaceDetails(locationByName[seed.Location].Id, seed.Name, seed.Description, seed.Floor, seed.IsQuiet,
+                seed.Rows, seed.Columns, seed.AisleAfterColumn),
+            now));
+        db.Spaces.AddRange(spaces.Values);
+        await db.SaveChangesAsync(cancellationToken);
+
+        foreach (var (seed, space) in spaces)
+        {
+            var number = 1;
+            for (var row = 1; row <= seed.Rows; row++)
+            {
+                for (var column = 1; column <= seed.Columns; column++, number++)
+                {
+                    var seat = new Resource(
+                        new ResourceDetails(
+                            categoryByCode["coworking"].Id,
+                            space.LocationId,
+                            $"{seed.ShortName}, место {number}",
+                            seed.Description,
+                            seed.Floor,
+                            Capacity: null,
+                            ImageUrl: null,
+                            RequiresApproval: false,
+                            seed.Open,
+                            seed.Close,
+                            SeatMaxMinutes,
+                            Seat: new SeatPlacement(space.Id, number, row, column)),
+                        now);
+
+                    var seatFeatures = new List<Feature>();
+                    if (row <= seed.RowsWithComputers)
+                    {
+                        seatFeatures.Add(featureByCode["computers"]);
+                    }
+
+                    if (row == 1)
+                    {
+                        seatFeatures.Add(featureByCode["window"]);
+                    }
+
+                    seat.SetFeatures(seatFeatures);
+                    db.Resources.Add(seat);
+                }
+            }
         }
 
         await db.SaveChangesAsync(cancellationToken);

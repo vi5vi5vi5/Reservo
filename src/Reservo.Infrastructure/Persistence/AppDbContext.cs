@@ -22,6 +22,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<Resource> Resources => Set<Resource>();
 
+    public DbSet<Space> Spaces => Set<Space>();
+
     public DbSet<Booking> Bookings => Set<Booking>();
 
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();

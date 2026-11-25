@@ -16,6 +16,7 @@ namespace Reservo.Application.Audit;
 /// <param name="EntityId">Id этой сущности.</param>
 /// <param name="ActorId">Кто сделал; пусто — система (фоновая задача).</param>
 /// <param name="ActorName">Имя того, кто сделал.</param>
+/// <param name="EntityName">Название объекта, чтобы показать запись без лишних запросов: у брони — название ресурса, у ресурса — его название, у пользователя — имя.</param>
 /// <param name="Details">Подробности: старые и новые значения, причина и т. п.</param>
 /// <param name="CreatedAt">Когда (UTC).</param>
 public sealed record AuditLogDto(
@@ -25,6 +26,7 @@ public sealed record AuditLogDto(
     int EntityId,
     int? ActorId,
     string? ActorName,
+    string? EntityName,
     JsonElement? Details,
     DateTimeOffset CreatedAt);
 
@@ -143,9 +145,18 @@ public sealed class AuditService(IAppDbContext db, ICurrentUser currentUser) : I
     }
 
     private sealed record AuditRow(
-        int Id, AuditAction Action, string EntityType, int EntityId, int? ActorId, string? ActorName, string? Details, DateTimeOffset CreatedAt);
+        int Id,
+        AuditAction Action,
+        string EntityType,
+        int EntityId,
+        int? ActorId,
+        string? ActorName,
+        string? EntityName,
+        string? Details,
+        DateTimeOffset CreatedAt);
 
-    private static IQueryable<AuditRow> Project(IQueryable<AuditLog> logs) =>
+    /// <summary>Название объекта берётся подзапросом в том же SQL: у журнала нет внешнего ключа на «любую» сущность.</summary>
+    private IQueryable<AuditRow> Project(IQueryable<AuditLog> logs) =>
         logs.Select(a => new AuditRow(
             a.Id,
             a.Action,
@@ -153,6 +164,11 @@ public sealed class AuditService(IAppDbContext db, ICurrentUser currentUser) : I
             a.EntityId,
             a.ActorId,
             a.Actor != null ? a.Actor.FullName : null,
+            a.EntityType == AuditEntityTypes.Booking
+                ? db.Bookings.Where(b => b.Id == a.EntityId).Select(b => b.Resource.Name).FirstOrDefault()
+                : a.EntityType == AuditEntityTypes.Resource
+                    ? db.Resources.Where(r => r.Id == a.EntityId).Select(r => r.Name).FirstOrDefault()
+                    : db.Users.Where(u => u.Id == a.EntityId).Select(u => u.FullName).FirstOrDefault(),
             a.Details,
             a.CreatedAt));
 
@@ -164,6 +180,7 @@ public sealed class AuditService(IAppDbContext db, ICurrentUser currentUser) : I
         row.EntityId,
         row.ActorId,
         row.ActorName,
+        row.EntityName,
         row.Details is null ? null : JsonSerializer.Deserialize<JsonElement>(row.Details),
         row.CreatedAt);
 }

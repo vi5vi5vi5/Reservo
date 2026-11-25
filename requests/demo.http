@@ -1,4 +1,4 @@
-### Reservo — сценарий демонстрации на защите
+﻿### Reservo — сценарий демонстрации на защите
 #
 # Запросы выполняются по порядку сверху вниз: кнопка «Отправить запрос» над каждым запросом в Visual Studio.
 # Окружение (адрес и пароли) выбирается в правом верхнем углу редактора, значения лежат в http-client.env.json:
@@ -34,7 +34,7 @@ GET {{host}}/api/features
 ### 3. Поиск: переговорная на 8 человек с проектором, завтра 14:00–15:30
 # «+» в адресе пишется как %2B, иначе сервер прочитает его как пробел.
 # «Байкал» завтра в 14:00 уже занят, поэтому найдётся «Онега».
-GET {{host}}/api/resources/available?categoryId=1&minCapacity=8&featureIds=1&from={{$localDatetime "yyyy-MM-dd" 1 d}}T14:00:00%2B03:00&to={{$localDatetime "yyyy-MM-dd" 1 d}}T15:30:00%2B03:00
+GET {{host}}/api/resources/available?categoryIds=1&minCapacity=8&featureIds=1&from={{$localDatetime "yyyy-MM-dd" 1 d}}T14:00:00%2B03:00&to={{$localDatetime "yyyy-MM-dd" 1 d}}T15:30:00%2B03:00
 Authorization: Bearer {{student.response.body.$.accessToken}}
 
 

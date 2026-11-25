@@ -12,7 +12,13 @@ public sealed record ResourceDetails(
     bool RequiresApproval,
     TimeOnly OpenTime,
     TimeOnly CloseTime,
-    int? MaxDurationMinutes);
+    int? MaxDurationMinutes,
+    bool AllowsOvernight = false,
+    string? PickupInfo = null,
+    SeatPlacement? Seat = null);
+
+/// <summary>Положение места на схеме коворкинга. Ряды и колонки нумеруются с 1.</summary>
+public sealed record SeatPlacement(int SpaceId, int Number, int Row, int Column);
 
 /// <summary>То, что бронируют: помещение или единица оборудования. Каждый ресурс — один экземпляр.</summary>
 public class Resource
@@ -20,6 +26,8 @@ public class Resource
     public const int NameMaxLength = 150;
     public const int DescriptionMaxLength = 2000;
     public const int ImageUrlMaxLength = 500;
+    public const int PickupInfoMaxLength = 300;
+    public const int DeactivationReasonMaxLength = 400;
 
     // EF Core наполняет связь «многие-ко-многим» через это поле, а снаружи список доступен только для чтения.
     private readonly List<Feature> _features = [];
@@ -70,8 +78,34 @@ public class Resource
     /// <summary>Максимальная длительность одной брони. Null — действует общий лимит из настроек.</summary>
     public int? MaxDurationMinutes { get; private set; }
 
+    /// <summary>
+    /// Бронь может длиться несколько дней (оборудование «на ночь», «на 3 дня»). Тогда рабочие часы — это часы выдачи
+    /// и возврата: в них должны попадать начало и конец брони, а не вся бронь целиком (BR-06).
+    /// </summary>
+    public bool AllowsOvernight { get; private set; }
+
+    /// <summary>Где и когда выдают и принимают оборудование, например «Стойка информации, 1 этаж».</summary>
+    public string? PickupInfo { get; private set; }
+
+    /// <summary>Коворкинг, если ресурс — место в нём.</summary>
+    public int? SpaceId { get; private set; }
+
+    public Space? Space { get; private set; }
+
+    /// <summary>Номер места в коворкинге — его видят люди («Место 7»).</summary>
+    public int? SeatNumber { get; private set; }
+
+    /// <summary>Ряд места на схеме, с 1.</summary>
+    public int? SeatRow { get; private set; }
+
+    /// <summary>Колонка места на схеме, с 1.</summary>
+    public int? SeatColumn { get; private set; }
+
     /// <summary>False — ресурс выведен из эксплуатации: он не удаляется, но бронировать его нельзя.</summary>
     public bool IsActive { get; private set; }
+
+    /// <summary>Почему ресурс выведен из эксплуатации. Показывается на карточке ресурса, пока он недоступен.</summary>
+    public string? DeactivationReason { get; private set; }
 
     public DateTimeOffset CreatedAt { get; private set; }
 
@@ -96,15 +130,17 @@ public class Resource
         _features.AddRange(features.Distinct());
     }
 
-    public void Deactivate(DateTimeOffset now)
+    public void Deactivate(string reason, DateTimeOffset now)
     {
         IsActive = false;
+        DeactivationReason = reason.Trim();
         UpdatedAt = now;
     }
 
     public void Activate(DateTimeOffset now)
     {
         IsActive = true;
+        DeactivationReason = null;
         UpdatedAt = now;
     }
 
@@ -121,5 +157,11 @@ public class Resource
         OpenTime = details.OpenTime;
         CloseTime = details.CloseTime;
         MaxDurationMinutes = details.MaxDurationMinutes;
+        AllowsOvernight = details.AllowsOvernight;
+        PickupInfo = CatalogText.NullIfBlank(details.PickupInfo);
+        SpaceId = details.Seat?.SpaceId;
+        SeatNumber = details.Seat?.Number;
+        SeatRow = details.Seat?.Row;
+        SeatColumn = details.Seat?.Column;
     }
 }

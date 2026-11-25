@@ -43,7 +43,7 @@ Content-Type: application/json
 ### Каталог и расписание (доступны и без входа)
 
 ### 6. Лаборатории по убыванию вместимости, первая страница
-GET {{host}}/api/resources?categoryId=3&sortBy=capacity&sortDir=desc&page=1&pageSize=5
+GET {{host}}/api/resources?categoryIds=3&sortBy=capacity&sortDir=desc&page=1&pageSize=5
 
 ### 7. Карточка ресурса
 GET {{host}}/api/resources/1

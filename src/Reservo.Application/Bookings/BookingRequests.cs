@@ -11,7 +11,7 @@ public interface IBookingDetails
 
     DateTimeOffset? EndAt { get; }
 
-    string Title { get; }
+    string? Title { get; }
 
     int? Attendees { get; }
 }
@@ -33,7 +33,7 @@ public sealed record CreateBookingRequest : IBookingDetails
 
     /// <summary>Тема или цель.</summary>
     /// <example>Встреча проектной команды</example>
-    public string Title { get; init; } = string.Empty;
+    public string? Title { get; init; }
 
     /// <summary>Число участников, необязательно.</summary>
     /// <example>6</example>
@@ -53,7 +53,7 @@ public sealed record UpdateBookingRequest : IBookingDetails
 
     /// <summary>Тема или цель.</summary>
     /// <example>Встреча проектной команды</example>
-    public string Title { get; init; } = string.Empty;
+    public string? Title { get; init; }
 
     /// <summary>Число участников, необязательно.</summary>
     /// <example>6</example>
@@ -88,8 +88,8 @@ public sealed class BookingDetailsValidator : AbstractValidator<IBookingDetails>
             .Must((request, end) => end > request.StartAt).WithMessage("Конец брони должен быть позже начала.")
             .When(x => x.StartAt is not null && x.EndAt is not null);
 
+        // Пустая тема допустима только у места в коворкинге — это проверяет сервис, когда знает ресурс.
         RuleFor(x => x.Title)
-            .NotEmpty().WithMessage("Укажите тему брони.")
             .MaximumLength(Booking.TitleMaxLength).WithMessage($"Тема не длиннее {Booking.TitleMaxLength} символов.");
 
         RuleFor(x => x.Attendees)

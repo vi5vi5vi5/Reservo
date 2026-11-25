@@ -30,7 +30,7 @@ public sealed class CategoryService(IAppDbContext db, ILogger<CategoryService> l
         await db.Categories
             .AsNoTracking()
             .OrderBy(c => c.Name)
-            .Select(c => new CategoryDto(c.Id, c.Code, c.Name, c.Description))
+            .Select(c => new CategoryDto(c.Id, c.Code, c.Name, c.Description, c.Kind))
             .ToListAsync(cancellationToken);
 
     public async Task<CategoryDto> GetByIdAsync(int id, CancellationToken cancellationToken) =>
@@ -38,7 +38,7 @@ public sealed class CategoryService(IAppDbContext db, ILogger<CategoryService> l
 
     public async Task<CategoryDto> CreateAsync(CategoryRequest request, CancellationToken cancellationToken)
     {
-        var category = new Category(request.Code, request.Name, request.Description);
+        var category = new Category(request.Code, request.Name, request.Description, request.Kind);
 
         db.Categories.Add(category);
         await db.SaveChangesAsync(cancellationToken);
@@ -51,7 +51,14 @@ public sealed class CategoryService(IAppDbContext db, ILogger<CategoryService> l
     {
         var category = await FindAsync(id, cancellationToken);
 
-        category.Update(request.Code, request.Name, request.Description);
+        // Вид категории определяет, как устроены её ресурсы (у места есть положение на схеме, у оборудования — нет),
+        // поэтому сменить его можно только у пустой категории.
+        if (category.Kind != request.Kind && await db.Resources.AnyAsync(r => r.CategoryId == id, cancellationToken))
+        {
+            throw CatalogErrors.CategoryKindLocked();
+        }
+
+        category.Update(request.Code, request.Name, request.Description, request.Kind);
         await db.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Изменена категория {CategoryId}", id);

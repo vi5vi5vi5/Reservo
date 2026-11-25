@@ -8,6 +8,7 @@ using Reservo.Application.Bookings;
 using Reservo.Application.Catalog.Categories;
 using Reservo.Application.Catalog.Locations;
 using Reservo.Application.Catalog.Resources;
+using Reservo.Domain.Catalog;
 
 namespace Reservo.IntegrationTests.Infrastructure;
 
@@ -46,26 +47,50 @@ public sealed class TestApi(ReservoApiFactory factory)
         return SessionFor(await ReadAsync<AuthResponse>(response));
     }
 
-    /// <summary>Отдельный ресурс для теста: переговорная на 10 человек, 08:00–21:00.</summary>
-    public async Task<ResourceDto> CreateResourceAsync(Session admin, bool requiresApproval = false, string? name = null)
+    /// <summary>
+    /// Отдельный ресурс для теста: по умолчанию переговорная на 10 человек, 08:00–21:00, в первой категории помещений.
+    /// <paramref name="customize"/> меняет запрос — например, другая категория или бронь «на ночь».
+    /// </summary>
+    public async Task<ResourceDto> CreateResourceAsync(
+        Session admin, bool requiresApproval = false, string? name = null, Func<ResourceRequest, ResourceRequest>? customize = null)
     {
-        var category = (await admin.Client.GetFromJsonAsync<List<CategoryDto>>("/api/categories", Json))!.First();
+        var categories = (await admin.Client.GetFromJsonAsync<List<CategoryDto>>("/api/categories", Json))!;
         var location = (await admin.Client.GetFromJsonAsync<List<LocationDto>>("/api/locations", Json))!.First();
 
-        var response = await admin.Client.PostAsJsonAsync("/api/resources", new ResourceRequest
+        var request = new ResourceRequest
         {
-            CategoryId = category.Id,
+            CategoryId = categories.First(c => c.Kind == ResourceKind.Room).Id,
             LocationId = location.Id,
             Name = name ?? $"Тестовая переговорная {Guid.NewGuid():N}",
             Capacity = 10,
             RequiresApproval = requiresApproval,
             OpenTime = new TimeOnly(8, 0),
             CloseTime = new TimeOnly(21, 0),
-        }, Json);
+        };
+
+        var response = await admin.Client.PostAsJsonAsync("/api/resources", customize?.Invoke(request) ?? request, Json);
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
 
         return await ReadAsync<ResourceDto>(response);
     }
+
+    /// <summary>Своя категория для теста, чтобы соседние тесты не мешали друг другу.</summary>
+    public static async Task<CategoryDto> CreateCategoryAsync(Session admin, ResourceKind kind)
+    {
+        var code = $"test-{Guid.NewGuid():N}"[..20];
+        var response = await admin.Client.PostAsJsonAsync("/api/categories", new CategoryRequest
+        {
+            Code = code,
+            Name = $"Категория {code}",
+            Kind = kind,
+        }, Json);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        return await ReadAsync<CategoryDto>(response);
+    }
+
+    /// <summary>Время для строки запроса: ISO 8601 со смещением, «+» закодирован.</summary>
+    public static string Q(DateTimeOffset moment) => Uri.EscapeDataString(moment.ToString("O"));
 
     public static Task<HttpResponseMessage> BookAsync(Session user, int resourceId, DateTimeOffset start, DateTimeOffset end, string title = "Встреча") =>
         user.Client.PostAsJsonAsync("/api/bookings", new CreateBookingRequest

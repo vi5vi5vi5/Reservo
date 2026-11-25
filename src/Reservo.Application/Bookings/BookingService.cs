@@ -61,10 +61,11 @@ public sealed class BookingService(
         // только при сохранении, поэтому сохранений два: сначала бронь, затем всё остальное.
         var (booking, notifications) = await db.ExecuteInTransactionAsync(async ct =>
         {
-            var resource = await db.Resources.AsNoTracking().SingleOrDefaultAsync(r => r.Id == request.ResourceId, ct)
+            var resource = await db.Resources.AsNoTracking().Include(r => r.Category).SingleOrDefaultAsync(r => r.Id == request.ResourceId, ct)
                 ?? throw BookingErrors.ResourceNotFound(request.ResourceId);
 
-            // 1. Правила, которым не нужна база (BR-02–BR-08).
+            // 1. Правила, которым не нужна база (BR-02–BR-08 и тема).
+            BookingRules.CheckTitle(request.Title, resource.Category.Kind).ThrowIfViolated();
             BookingRules.CheckSlot(startAt, endAt, request.Attendees, resource, policy, now).ThrowIfViolated();
 
             // 2. Очередь на ресурс: одновременные брони этого ресурса дальше идут по одной, и каждая видит предыдущие.
@@ -124,6 +125,7 @@ public sealed class BookingService(
         {
             var booking = await db.Bookings
                 .Include(b => b.Resource)
+                .ThenInclude(r => r.Category)
                 .SingleOrDefaultAsync(b => b.Id == id, ct);
 
             EnsureCanSee(booking);
@@ -135,6 +137,7 @@ public sealed class BookingService(
             }
 
             BookingRules.CheckCanModify(booking, now).ThrowIfViolated();
+            BookingRules.CheckTitle(request.Title, booking.Resource.Category.Kind).ThrowIfViolated();
             BookingRules.CheckSlot(startAt, endAt, request.Attendees, booking.Resource, policy, now).ThrowIfViolated();
 
             await db.LockResourceForBookingAsync(booking.ResourceId, ct);
@@ -240,6 +243,15 @@ public sealed class BookingService(
             bookings = bookings.Where(b => b.UserId == userId);
         }
 
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var term = query.Search.Trim().ToLower();
+            bookings = bookings.Where(b =>
+                b.Resource.Name.ToLower().Contains(term)
+                || b.User.FullName.ToLower().Contains(term)
+                || b.User.Email.Contains(term));
+        }
+
         return await Sort(bookings, query.SortDir)
             .Select(BookingMappings.ToDto)
             .ToPagedResultAsync(query, cancellationToken);
@@ -291,6 +303,8 @@ public sealed class BookingService(
     /// <summary>
     /// BR-09 и BR-11: время ресурса не занято другой активной бронью, а у пользователя нет своей брони на это же время.
     /// Условие пересечения — то же, что в BookingRules.Overlaps, только выполняется в SQL.
+    /// BR-11 касается только того, что занимает самого человека (помещения и места): оборудование можно держать
+    /// у себя несколько дней и при этом бронировать аудитории.
     /// </summary>
     private async Task EnsureNoOverlapsAsync(
         Resource resource, int userId, DateTimeOffset startAt, DateTimeOffset endAt, int exceptBookingId, CancellationToken cancellationToken)
@@ -306,8 +320,14 @@ public sealed class BookingService(
             throw BookingRules.TimeConflict(resource.Name, busy.StartAt, busy.EndAt, policy).ToAppException();
         }
 
+        if (!resource.Category.Kind.OccupiesPerson())
+        {
+            return;
+        }
+
         var own = await ActiveBookings()
-            .Where(b => b.UserId == userId && b.Id != exceptBookingId && b.StartAt < endAt && startAt < b.EndAt)
+            .Where(b => b.UserId == userId && b.Id != exceptBookingId && b.StartAt < endAt && startAt < b.EndAt
+                        && b.Resource.Category.Kind != ResourceKind.Equipment)
             .OrderBy(b => b.StartAt)
             .Select(b => new { b.StartAt, b.EndAt, ResourceName = b.Resource.Name })
             .FirstOrDefaultAsync(cancellationToken);
@@ -371,9 +391,10 @@ public sealed class BookingService(
 
     private static IQueryable<Booking> ApplyFilters(IQueryable<Booking> bookings, BookingListQuery query)
     {
-        if (query.Status is { } status)
+        var statuses = query.Status.Distinct().ToArray();
+        if (statuses.Length > 0)
         {
-            bookings = bookings.Where(b => b.Status == status);
+            bookings = bookings.Where(b => statuses.Contains(b.Status));
         }
 
         // Окно from–to отбирает брони, которые хотя бы частично в него попадают.

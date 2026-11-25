@@ -21,7 +21,8 @@ internal static class DemoSeeder
     ];
 
     private sealed record BookingSeed(
-        string Resource, string UserEmail, int DayOffset, (int H, int M) From, (int H, int M) To, string Title, int? Attendees);
+        string Resource, string UserEmail, int DayOffset, (int H, int M) From, (int H, int M) To, string? Title, int? Attendees,
+        int EndDayOffset = -1);
 
     private static readonly BookingSeed[] Bookings =
     [
@@ -33,6 +34,19 @@ internal static class DemoSeeder
         // Ресурсы с согласованием: брони попадут в статус Pending — их можно одобрить или отклонить на демо.
         new("Лаборатория робототехники", "student@reservo.example", 2, (10, 0), (13, 0), "Сборка манипулятора", 3),
         new("3D-принтер Prusa MK4", "student2@reservo.example", 2, (9, 0), (15, 0), "Печать корпуса для робота", null),
+
+        // Оборудование на несколько дней: ноутбук занят с завтрашнего утра на трое суток.
+        new("Ноутбук MacBook Pro #1", "teacher@reservo.example", 1, (10, 0), (10, 0), "Монтаж видео для конференции", null, EndDayOffset: 4),
+
+        // Коворкинги: часть мест завтра и послезавтра занята, чтобы схема зала на демо не была пустой. Тема у мест необязательна.
+        new("«Точка», место 1", "student2@reservo.example", 1, (10, 0), (14, 0), null, null),
+        new("«Точка», место 2", "teacher@reservo.example", 1, (9, 0), (12, 0), "Проверка курсовых", null),
+        new("«Точка», место 5", "student2@reservo.example", 2, (13, 0), (17, 0), null, null),
+        new("«Точка», место 8", "teacher@reservo.example", 1, (13, 0), (16, 0), null, null),
+        new("«Точка», место 11", "student2@reservo.example", 2, (10, 0), (12, 0), null, null),
+        new("«Точка», место 14", "teacher@reservo.example", 2, (14, 0), (18, 0), null, null),
+        new("Библиотека, место 3", "student2@reservo.example", 1, (15, 0), (19, 0), "Подготовка к экзамену", null),
+        new("Библиотека, место 9", "teacher@reservo.example", 2, (11, 0), (15, 0), null, null),
     ];
 
     public static async Task SeedAsync(
@@ -83,7 +97,7 @@ internal static class DemoSeeder
                 resource.Id,
                 users[seed.UserEmail].Id,
                 At(seed.DayOffset, seed.From),
-                At(seed.DayOffset, seed.To),
+                At(seed.EndDayOffset >= 0 ? seed.EndDayOffset : seed.DayOffset, seed.To),
                 seed.Title,
                 seed.Attendees,
                 resource.RequiresApproval,

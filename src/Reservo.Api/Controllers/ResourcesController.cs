@@ -12,22 +12,38 @@ namespace Reservo.Api.Controllers;
 [Route("api/resources")]
 [Authorize(Policy = Policies.Admin)]
 [Produces("application/json")]
-public sealed class ResourcesController(IResourceService resourceService, IAvailabilityService availabilityService) : ControllerBase
+public sealed class ResourcesController(
+    IResourceService resourceService,
+    IAvailabilityService availabilityService,
+    IBookingSuggestionService suggestionService) : ControllerBase
 {
     /// <summary>Ресурсы, свободные на весь интервал <c>from</c>–<c>to</c>, с теми же фильтрами, что и каталог.</summary>
     /// <remarks>
-    /// «Свободен» значит: нет активных броней, пересекающих интервал, интервал укладывается в лимит длительности брони ресурса
-    /// и — если интервал в пределах одного дня — в рабочие часы ресурса. Время со смещением, например
+    /// «Свободен» значит: бронь на этот интервал пройдёт — нет активных броней, пересекающих интервал, он укладывается в лимит
+    /// длительности и в рабочие часы (у ресурса «на ночь» — начало и конец в часах выдачи). У каждого ресурса есть
+    /// <c>freeUntil</c> — до какого момента он свободен после интервала. Время со смещением, например
     /// <c>from=2026-10-26T14:00:00+03:00</c> (в адресной строке «+» кодируется как <c>%2B</c>, Swagger делает это сам).
     /// </remarks>
     /// <response code="200">Страница свободных ресурсов.</response>
     /// <response code="400">Неверный интервал или фильтры (<c>validation_failed</c>).</response>
     [HttpGet("available")]
     [AllowAnonymous]
-    [ProducesResponseType<PagedResult<ResourceDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PagedResult<AvailableResourceDto>>(StatusCodes.Status200OK)]
     [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
-    public Task<PagedResult<ResourceDto>> GetAvailable([FromQuery] AvailableResourcesQuery query, CancellationToken cancellationToken) =>
+    public Task<PagedResult<AvailableResourceDto>> GetAvailable([FromQuery] AvailableResourcesQuery query, CancellationToken cancellationToken) =>
         availabilityService.GetAvailableResourcesAsync(query, cancellationToken);
+
+    /// <summary>Варианты вместо занятого времени: тот же ресурс раньше или позже, похожий ресурс на то же время.</summary>
+    /// <remarks>Фронтенд вызывает после ответа 409 <c>booking.time_conflict</c>. Варианты свободны на момент запроса, но не зарезервированы.</remarks>
+    /// <response code="400">Неверный интервал (<c>validation_failed</c>).</response>
+    /// <response code="404">Ресурс не найден (<c>not_found</c>).</response>
+    [HttpGet("{id:int}/suggestions")]
+    [AllowAnonymous]
+    [ProducesResponseType<IReadOnlyList<BookingSuggestionDto>>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ValidationProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public Task<IReadOnlyList<BookingSuggestionDto>> GetSuggestions(int id, [FromQuery] SuggestionQuery query, CancellationToken cancellationToken) =>
+        suggestionService.GetSuggestionsAsync(id, query, cancellationToken);
 
     /// <summary>Расписание ресурса: занятые интервалы за окно <c>from</c>–<c>to</c> (не больше 31 дня).</summary>
     /// <remarks>Тема, владелец и id брони видны только владельцу брони и администратору (BR-17), остальным — просто «занято».</remarks>
@@ -45,6 +61,7 @@ public sealed class ResourcesController(IResourceService resourceService, IAvail
     /// <remarks>
     /// Фильтр по оснащению оставляет ресурсы, у которых есть всё перечисленное: <c>featureIds=1&amp;featureIds=4</c>.
     /// Выведенные из эксплуатации ресурсы показываются только администратору с <c>includeInactive=true</c>.
+    /// Места в коворкингах в каталог не попадают, если не указать <c>kinds=Seat</c> или <c>spaceId</c>.
     /// </remarks>
     /// <response code="200">Страница каталога.</response>
     /// <response code="400">Неверные параметры (<c>validation_failed</c>).</response>
@@ -55,7 +72,7 @@ public sealed class ResourcesController(IResourceService resourceService, IAvail
     public Task<PagedResult<ResourceDto>> GetList([FromQuery] ResourceListQuery query, CancellationToken cancellationToken) =>
         resourceService.GetListAsync(query, cancellationToken);
 
-    /// <summary>Карточка ресурса.</summary>
+    /// <summary>Карточка ресурса. Выведенный из эксплуатации ресурс тоже отдаётся — с причиной в <c>deactivationReason</c>.</summary>
     /// <response code="404">Ресурс не найден (<c>not_found</c>).</response>
     [HttpGet("{id:int}")]
     [AllowAnonymous]

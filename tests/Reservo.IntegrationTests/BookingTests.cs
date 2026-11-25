@@ -87,15 +87,18 @@ public class BookingTests(ReservoApiFactory factory)
 
         var from = Uri.EscapeDataString(Moscow.At(4, 12, 30).ToString("O"));
         var to = Uri.EscapeDataString(Moscow.At(4, 13, 30).ToString("O"));
-        var page = await _api.Anonymous().GetFromJsonAsync<PagedResult<ResourceDto>>(
+        var page = await _api.Anonymous().GetFromJsonAsync<PagedResult<AvailableResourceDto>>(
             $"/api/resources/available?search={marker}&from={from}&to={to}", TestApi.Json);
 
-        Assert.Equal([free.Id], page!.Items.Select(r => r.Id));
+        Assert.Equal([free.Id], page!.Items.Select(r => r.Resource.Id));
+
+        // Свободной переговорной дальше никто не пользуется — свободна до закрытия в 21:00.
+        Assert.Equal(Moscow.At(4, 21), page.Items[0].FreeUntil);
 
         // Вечером ресурс закрыт (работает до 21:00) — в поиске его тоже нет.
         var lateFrom = Uri.EscapeDataString(Moscow.At(4, 20, 30).ToString("O"));
         var lateTo = Uri.EscapeDataString(Moscow.At(4, 21, 30).ToString("O"));
-        var late = await _api.Anonymous().GetFromJsonAsync<PagedResult<ResourceDto>>(
+        var late = await _api.Anonymous().GetFromJsonAsync<PagedResult<AvailableResourceDto>>(
             $"/api/resources/available?search={marker}&from={lateFrom}&to={lateTo}", TestApi.Json);
 
         Assert.Empty(late!.Items);

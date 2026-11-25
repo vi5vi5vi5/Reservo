@@ -28,14 +28,32 @@ internal static class ResourceQueries
                 || (r.Description != null && r.Description.ToLower().Contains(term)));
         }
 
-        if (query.CategoryId is { } categoryId)
+        var categoryIds = query.CategoryIds.Distinct().ToArray();
+        if (categoryIds.Length > 0)
         {
-            resources = resources.Where(r => r.CategoryId == categoryId);
+            resources = resources.Where(r => categoryIds.Contains(r.CategoryId));
         }
 
-        if (query.LocationId is { } locationId)
+        var locationIds = query.LocationIds.Distinct().ToArray();
+        if (locationIds.Length > 0)
         {
-            resources = resources.Where(r => r.LocationId == locationId);
+            resources = resources.Where(r => locationIds.Contains(r.LocationId));
+        }
+
+        var kinds = query.Kinds.Distinct().ToArray();
+        if (kinds.Length > 0)
+        {
+            resources = resources.Where(r => kinds.Contains(r.Category.Kind));
+        }
+        else if (query.SpaceId is null)
+        {
+            // Места коворкингов — десятки одинаковых ресурсов. В общем каталоге они только мешают, их показывает схема зала.
+            resources = resources.Where(r => r.Category.Kind != ResourceKind.Seat);
+        }
+
+        if (query.SpaceId is { } spaceId)
+        {
+            resources = resources.Where(r => r.SpaceId == spaceId);
         }
 
         if (query.MinCapacity is { } minCapacity)

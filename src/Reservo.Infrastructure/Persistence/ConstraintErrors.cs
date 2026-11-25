@@ -24,6 +24,8 @@ internal static class ConstraintErrors
         [LocationConfiguration.NameIndexName] = CatalogErrors.DuplicateLocation,
         [FeatureConfiguration.CodeIndexName] = CatalogErrors.DuplicateFeature,
         [FeatureConfiguration.NameIndexName] = CatalogErrors.DuplicateFeature,
+        [ResourceConfiguration.SeatNumberIndexName] = CatalogErrors.DuplicateSeat,
+        [ResourceConfiguration.SeatPositionIndexName] = CatalogErrors.DuplicateSeat,
     };
 
     public static bool TryTranslate(DbUpdateException exception, [NotNullWhen(true)] out AppException? error)

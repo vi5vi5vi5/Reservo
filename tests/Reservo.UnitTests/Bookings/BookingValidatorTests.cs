@@ -45,7 +45,9 @@ public class BookingValidatorTests
         result.ShouldHaveValidationErrorFor(x => x.ResourceId);
         result.ShouldHaveValidationErrorFor(x => x.StartAt);
         result.ShouldHaveValidationErrorFor(x => x.EndAt);
-        result.ShouldHaveValidationErrorFor(x => x.Title);
+
+        // Тема необязательна на уровне формата: у места в коворкинге её может не быть. Для остальных её требует BookingRules.CheckTitle.
+        result.ShouldNotHaveValidationErrorFor(x => x.Title);
     }
 
     [Fact]

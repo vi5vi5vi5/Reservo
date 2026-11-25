@@ -8,7 +8,8 @@ namespace Reservo.Application.Catalog.Categories;
 /// <param name="Code">Стабильный ключ латиницей, например <c>meeting-room</c>.</param>
 /// <param name="Name">Название.</param>
 /// <param name="Description">Описание.</param>
-public sealed record CategoryDto(int Id, string Code, string Name, string? Description);
+/// <param name="Kind">Вид ресурсов: <c>Room</c> — помещения, <c>Seat</c> — места в коворкинге, <c>Equipment</c> — оборудование.</param>
+public sealed record CategoryDto(int Id, string Code, string Name, string? Description, ResourceKind Kind);
 
 /// <summary>Данные категории для создания или изменения.</summary>
 public sealed record CategoryRequest
@@ -24,6 +25,10 @@ public sealed record CategoryRequest
     /// <summary>Описание, необязательно.</summary>
     /// <example>Открытые пространства для самостоятельной работы</example>
     public string? Description { get; init; }
+
+    /// <summary>Вид ресурсов: <c>Room</c>, <c>Seat</c> или <c>Equipment</c>. Пока в категории есть ресурсы, вид не меняется.</summary>
+    /// <example>Room</example>
+    public ResourceKind Kind { get; init; } = ResourceKind.Room;
 }
 
 public sealed class CategoryRequestValidator : AbstractValidator<CategoryRequest>
@@ -39,11 +44,13 @@ public sealed class CategoryRequestValidator : AbstractValidator<CategoryRequest
         RuleFor(x => x.Description)
             .MaximumLength(Category.DescriptionMaxLength)
             .WithMessage($"Описание не длиннее {Category.DescriptionMaxLength} символов.");
+
+        RuleFor(x => x.Kind).IsInEnum().WithMessage("Вид категории — Room, Seat или Equipment.");
     }
 }
 
 public static class CategoryMappings
 {
     public static CategoryDto ToDto(this Category category) =>
-        new(category.Id, category.Code, category.Name, category.Description);
+        new(category.Id, category.Code, category.Name, category.Description, category.Kind);
 }

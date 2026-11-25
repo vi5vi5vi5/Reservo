@@ -41,6 +41,24 @@ internal static class BookingTestData
                 MaxDurationMinutes: maxDurationMinutes),
             Now);
 
+    /// <summary>Ноутбук «на несколько дней»: выдача и возврат 08:00–21:00, лимит трое суток.</summary>
+    public static Resource Laptop() =>
+        new(
+            new ResourceDetails(
+                CategoryId: 2,
+                LocationId: 1,
+                Name: "Ноутбук MacBook Pro #1",
+                Description: null,
+                Floor: 1,
+                Capacity: null,
+                ImageUrl: null,
+                RequiresApproval: false,
+                OpenTime: new TimeOnly(8, 0),
+                CloseTime: new TimeOnly(21, 0),
+                MaxDurationMinutes: 3 * 24 * 60,
+                AllowsOvernight: true),
+            Now);
+
     /// <summary>Бронь на завтра 14:00–15:00, созданная «сейчас».</summary>
     public static Booking TomorrowAt14(bool requiresApproval = false) =>
         new(1, userId: 7, Msk(25, 14), Msk(25, 15), "Встреча", attendees: 4, requiresApproval, Now);

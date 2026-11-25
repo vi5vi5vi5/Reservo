@@ -135,7 +135,7 @@ public class BookingRulesTests
     public void Inactive_resource_fails()
     {
         var resource = Room();
-        resource.Deactivate(Now);
+        resource.Deactivate("Ремонт", Now);
 
         Assert.Equal("resource.inactive", BookingRules.CheckResourceActive(resource)?.Code);
     }
@@ -167,7 +167,7 @@ public class BookingRulesTests
     public void Slot_check_reports_the_first_violation()
     {
         var resource = Room();
-        resource.Deactivate(Now);
+        resource.Deactivate("Ремонт", Now);
 
         // Время тоже неверное (в прошлом), но первым сообщается, что ресурс выведен из эксплуатации.
         var error = BookingRules.CheckSlot(Msk(23, 14), Msk(23, 15), 6, resource, Policy, Now);
