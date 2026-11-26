@@ -1,0 +1,47 @@
+/* Reservo — токены дизайн-системы (палитра «Слива»). Тема — атрибут data-theme на <html>. */
+:root {
+  --font-sans: Manrope, "Segoe UI", system-ui, sans-serif;
+  --font-display: Unbounded, Manrope, system-ui, sans-serif;
+  --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px; --space-6: 24px; --space-8: 32px; --space-12: 48px;
+  --radius-xs: 6px; --radius-sm: 10px; --radius-md: 14px; --radius-lg: 20px; --radius-pill: 999px;
+  --control-sm: 32px; --control-md: 40px; --control-lg: 48px; --touch-min: 44px; --sidebar-width: 248px; --slot-height: 12px;
+  --duration-fast: 150ms; --duration-base: 220ms; --duration-slow: 300ms;
+}
+:root, [data-theme="light"] {
+  color-scheme: light;
+  --bg: #faf7f9; --surface: #ffffff; --surface-sunken: #f3edf1; --surface-muted: #ede5eb; --surface-hover: #e6dce3;
+  --border: #e6dde3; --border-strong: #d4c6cf; --border-control: #8a7985;
+  --ink: #241a22; --ink-muted: #665763; --ink-subtle: #75656f; --ink-disabled: #b3a6af;
+  --accent: #7a3d6c; --accent-hover: #69305c; --accent-pressed: #58264d; --on-accent: #ffffff; --accent-soft: #f3e6f0; --accent-text: #7a3d6c; --focus: #7a3d6c;
+  --status-pending: #8a5200; --status-pending-bg: #fcefd8;
+  --status-confirmed: #7a3d6c; --status-confirmed-bg: #f3e6f0;
+  --status-rejected: #b0222e; --status-rejected-bg: #fce3e3;
+  --status-cancelled: #5d585c; --status-cancelled-bg: #ebe9ea;
+  --status-completed: #475670; --status-completed-bg: #e6eaf1;
+  --info: #2c5d9b; --info-bg: #e3ecf8;
+  --danger: #b0222e; --on-danger: #ffffff; --now: #d63a52;
+  --slot-free: #ffffff; --slot-busy: #e4dae1; --slot-mine: #7a3d6c; --slot-offhours: #efebee;
+  --overlay: rgba(36, 26, 34, 0.48);
+  --shadow-sm: 0 1px 2px rgba(36, 26, 34, 0.06), 0 1px 1px rgba(36, 26, 34, 0.04);
+  --shadow-md: 0 6px 20px rgba(36, 26, 34, 0.10), 0 2px 6px rgba(36, 26, 34, 0.06);
+  --shadow-lg: 0 24px 60px rgba(36, 26, 34, 0.20);
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #191317; --surface: #221a20; --surface-sunken: #1d161b; --surface-muted: #2e242b; --surface-hover: #382c35;
+  --border: #3a2e37; --border-strong: #4d3f49; --border-control: #86737f;
+  --ink: #f3ecf1; --ink-muted: #b8a9b3; --ink-subtle: #93848e; --ink-disabled: #5e505a;
+  --accent: #dba6cf; --accent-hover: #e6b8db; --accent-pressed: #cf93c2; --on-accent: #2a0f22; --accent-soft: #3a2434; --accent-text: #e6b8db; --focus: #e6b8db;
+  --status-pending: #f0c36b; --status-pending-bg: #372a12;
+  --status-confirmed: #e6b8db; --status-confirmed-bg: #3a2434;
+  --status-rejected: #ff9a9a; --status-rejected-bg: #3d1b1d;
+  --status-cancelled: #b3adb1; --status-cancelled-bg: #2d292c;
+  --status-completed: #a8b5c9; --status-completed-bg: #222a35;
+  --info: #8fb6ef; --info-bg: #1b2940;
+  --danger: #ff9a9a; --on-danger: #2b0a0d; --now: #ff7486;
+  --slot-free: #221a20; --slot-busy: #3a2f37; --slot-mine: #dba6cf; --slot-offhours: #1a1418;
+  --overlay: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.65);
+}

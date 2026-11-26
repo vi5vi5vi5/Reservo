@@ -1,7 +1,17 @@
 # Образ API. Многоэтапная сборка: SDK нужен только чтобы скомпилировать проект,
 # в итоговый образ попадает лишь среда выполнения ASP.NET Core и опубликованное приложение.
 
-# ---- Этап 1: сборка ----
+# ---- Этап 1: фронтенд ----
+# Собранный фронтенд — это просто статические файлы. Их отдаёт сам API из wwwroot,
+# поэтому сайт и API живут на одном адресе: не нужен ни CORS, ни отдельный веб-сервер.
+FROM node:22-alpine AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+# ---- Этап 2: сборка API ----
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
@@ -17,7 +27,7 @@ RUN dotnet restore src/Reservo.Api/Reservo.Api.csproj
 COPY src/ src/
 RUN dotnet publish src/Reservo.Api/Reservo.Api.csproj --configuration Release --no-restore --output /app
 
-# ---- Этап 2: итоговый образ ----
+# ---- Этап 3: итоговый образ ----
 # Образ на Ubuntu: в нём есть ICU (русские названия месяцев в сообщениях) и база часовых поясов (Europe/Moscow).
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
@@ -26,6 +36,7 @@ WORKDIR /app
 RUN mkdir logs && chown "$APP_UID" logs
 
 COPY --from=build /app .
+COPY --from=web /web/dist ./wwwroot/
 
 # Непривилегированный пользователь из базового образа: даже при уязвимости в приложении у него нет прав root.
 USER $APP_UID

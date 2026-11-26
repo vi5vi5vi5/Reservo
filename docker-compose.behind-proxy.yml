@@ -1,0 +1,30 @@
+# Reservo за ЧУЖИМ nginx.
+#
+# Накладывается поверх docker-compose.yml, когда порты 80 и 443 на сервере уже держит другой сервис
+# (у нас это nginx из MeetUp). Свой TLS Reservo не поднимает: API подключается к сети соседа,
+# и тот проксирует к нему запросы по имени домена reservo.fferry.ru.
+#
+# Включается одной строкой в .env (тогда хватает обычного `docker compose up -d`):
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.behind-proxy.yml
+#   RESERVO_PROXY_NETWORK=server_default
+
+services:
+  api:
+    environment:
+      # nginx передаёт настоящий адрес клиента и схему https в заголовках X-Forwarded-*.
+      # Без этого приложение видело бы адрес контейнера nginx и считало бы, что запрос пришёл по http:
+      # например, ограничение частоты входа считало бы всех пользователей одним.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
+    networks:
+      # Своя сеть проекта остаётся: по ней API ходит в базу.
+      default: {}
+      # Сеть соседа, из которой нас зовёт его nginx.
+      shared:
+        aliases:
+          # Своё уникальное имя: в общей сети уже есть сервисы app у MeetUp и Ferry.
+          - reservo-api
+
+networks:
+  shared:
+    external: true
+    name: ${RESERVO_PROXY_NETWORK:-server_default}

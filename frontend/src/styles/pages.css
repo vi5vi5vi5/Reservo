@@ -1,0 +1,46 @@
+/* Reservo — раскладка отдельных экранов на широких экранах. На телефоне всё идёт одной колонкой (screens.css). */
+
+.home-side { display: flex; flex-direction: column; }
+.home-side > .rowcard { margin: 16px 16px 0; width: auto; }
+.guest { margin: 28px 16px 0; }
+.res-photo { aspect-ratio: auto; height: 188px; }
+.res-sched { display: flex; flex-direction: column; }
+.auth-box { display: flex; flex-direction: column; gap: 16px; padding-bottom: 28px; }
+.admin-cols { display: flex; flex-direction: column; }
+.spaces-row { overflow: hidden; }
+.dock { margin-top: auto; }
+.rv-switch input { flex: none; }
+.rv-seg button { white-space: nowrap; }
+.cnt-row p { min-width: 0; }
+
+@media (min-width: 768px) {
+  .hero { padding: 24px 16px 0; }
+  .phrase { font-size: 34px; line-height: 58px; letter-spacing: -.025em; }
+  .hero-cta { width: auto; min-width: 280px; }
+  .home-side > .rowcard { margin: 24px 16px 0; }
+  .auth-page { max-width: 480px; }
+  .auth-page .bar { padding-left: 16px; }
+  .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .res-photo { height: 240px; border-radius: var(--radius-lg); margin: 16px 16px 0; }
+  .res-photo .ovl-top { top: 12px; left: 12px; }
+  .tl { padding: 0 16px; }
+}
+
+@media (min-width: 1200px) {
+  .home { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 32px; align-items: start; padding-top: 24px; }
+  .home .hero { padding: 40px 16px 0; position: sticky; top: 24px; }
+  .home .phrase { font-family: var(--font-sans); font-size: 44px; line-height: 70px; font-weight: 700; }
+  .home .hero-greet { font-size: 16px; margin-bottom: 12px; }
+  .home-side .sec:first-child { margin-top: 0; }
+  .home-side > .rowcard { margin: 0 16px; }
+
+  /* Ресурс: слева карточка, справа расписание и панель брони, которая держится внизу экрана. */
+  .res-grid { display: grid; grid-template-columns: 420px minmax(0, 1fr); gap: 24px; align-items: start; padding-bottom: 24px; }
+  .res-info { position: sticky; top: 0; padding-bottom: 24px; }
+  .res-sched .sec:first-child { margin-top: 24px; }
+  .res-sched .dock { position: sticky; bottom: 16px; }
+
+  .admin-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .hrow .lbl { width: 200px; }
+  .hc, .hrow .hr { width: 32px; }
+}

@@ -1,0 +1,99 @@
+/* Reservo — каркас приложения и адаптивность.
+   Одни и те же компоненты и экраны, разная раскладка:
+   телефон (до 767px) — нижние вкладки, листы снизу;
+   планшет (768–1199px) — узкое меню из иконок слева;
+   компьютер (от 1200px) — меню целиком, сетки карточек, листы становятся окнами по центру. */
+
+:root { --tabbar-h: 0px; }
+html { background: var(--bg); -webkit-tap-highlight-color: transparent; }
+body { min-height: 100dvh; }
+#root { min-height: 100dvh; }
+
+.app { min-height: 100dvh; display: flex; background: var(--bg); color: var(--ink); }
+.app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding-bottom: var(--tabbar-h); }
+.app[data-tabs="true"] { --tabbar-h: calc(64px + env(safe-area-inset-bottom)); }
+
+/* Страница — колонка с ограничением ширины на больших экранах. */
+.page { width: 100%; margin: 0 auto; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.page-body { flex: 1; }
+.bar.sticky { position: sticky; top: 0; z-index: 20; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(12px); -webkit-backdrop-filter: saturate(1.4) blur(12px); }
+
+/* Нижняя панель вкладок — только на телефоне. */
+.rv-tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 6px 4px calc(8px + env(safe-area-inset-bottom)); box-shadow: 0 -8px 24px color-mix(in srgb, var(--ink) 6%, transparent); }
+
+/* Панель действия внизу экрана (оформить бронь, выбрать место). */
+.dock { position: sticky; bottom: var(--tabbar-h); z-index: 15; padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+
+/* Боковое меню — планшет и компьютер. */
+.rv-side { display: none; }
+.side-user { margin-top: auto; display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: var(--radius-md); color: var(--ink); text-decoration: none; border: 0; background: transparent; font: inherit; cursor: pointer; text-align: left; width: 100%; }
+.side-user:hover { background: var(--surface-hover); }
+.side-user .who { min-width: 0; display: flex; flex-direction: column; }
+.side-user .who b { font-size: 14px; line-height: 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-user .who small { font-size: 12px; line-height: 16px; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-nav .ic-wrap { position: relative; display: inline-grid; }
+.rv-nav .dot-count { display: none; }
+
+/* Скрытие по ширине. */
+@media (max-width: 767px) { .only-desktop { display: none !important; } }
+
+/* Сетки карточек: на телефоне столбик, шире — плитка. */
+.grid-cards { display: flex; flex-direction: column; gap: 12px; }
+
+/* Подгрузка следующей страницы списка. */
+.more { display: flex; justify-content: center; padding: 8px 16px 24px; }
+
+/* Ссылки-кнопки из компонентов не подчёркиваются. */
+a.rv-btn, a.rv-nav, a.rv-tab, a.nowr, a.rowcard, a.upc, a.resm-hit, a.bkc-hit, a.arow { text-decoration: none; color: inherit; }
+a.rv-btn-primary { color: var(--on-accent); }
+a.rv-btn-ghost { color: var(--accent-text); }
+
+/* Подсветка обновлённых живьём элементов. */
+.live-flash { animation: rv-fresh 1.6s ease both; }
+
+/* ---------- Планшет ---------- */
+@media (min-width: 768px) {
+  .app[data-tabs="true"] { --tabbar-h: 0px; }
+  .rv-tabbar { display: none; }
+  .only-phone { display: none !important; }
+
+  .rv-side { display: flex; position: sticky; top: 0; height: 100dvh; flex: none; width: 76px; padding: 18px 10px; overflow-y: auto; scrollbar-width: none; }
+  .rv-side .rv-logo { padding: 0 6px 18px; justify-content: center; }
+  .rv-side .rv-logo-word, .rv-side .nav-label, .rv-side .rv-nav-title, .side-user .who { display: none; }
+  .rv-side .rv-nav { justify-content: center; padding: 0; height: 48px; border-radius: var(--radius-md); position: relative; }
+  .rv-side .rv-nav .rv-counter { position: absolute; top: 4px; right: 6px; margin: 0; min-width: 18px; height: 18px; font-size: 11px; box-shadow: 0 0 0 2px var(--surface-sunken); }
+  .side-user { justify-content: center; padding: 6px; }
+
+  .page { padding: 0 16px; }
+  .page-narrow { max-width: 760px; }
+  .bar { padding-left: 16px; }
+  .bar-t { font-size: 28px; line-height: 34px; }
+
+  .grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+
+  /* Листы — окна по центру. */
+  .scrim { justify-content: center; align-items: center; padding: 24px; }
+  .scrim .rv-sheet { width: min(560px, 100%); max-height: min(88vh, 860px); border-radius: var(--radius-lg); padding: 20px 24px 24px; animation: rv-modal-in var(--duration-slow) cubic-bezier(.2, .8, .2, 1) both; }
+  .scrim .rv-sheet.wide { width: min(720px, 100%); }
+  .scrim .rv-grabber { display: none; }
+
+  .toastz { top: 20px; left: auto; right: 24px; width: 380px; }
+
+  .dock { border: 1px solid var(--border); border-radius: var(--radius-lg); margin: 16px 16px calc(16px + env(safe-area-inset-bottom)); box-shadow: var(--shadow-md); padding-bottom: 16px; }
+}
+
+/* ---------- Компьютер ---------- */
+@media (min-width: 1200px) {
+  .rv-side { width: var(--sidebar-width); padding: 20px 12px; }
+  .rv-side .rv-logo { justify-content: flex-start; padding: 0 10px 20px; }
+  .rv-side .rv-logo-word, .rv-side .nav-label { display: inline; }
+  .rv-side .rv-nav-title { display: block; }
+  .rv-side .rv-nav { justify-content: flex-start; padding: 0 12px; height: 44px; border-radius: var(--radius-pill); }
+  .rv-side .rv-nav .rv-counter { position: static; margin-left: auto; box-shadow: none; }
+  .side-user { justify-content: flex-start; padding: 10px; }
+  .side-user .who { display: flex; }
+
+  .page { max-width: 1280px; padding: 0 24px; }
+  .page-narrow { max-width: 820px; }
+  .bar { min-height: 76px; }
+}

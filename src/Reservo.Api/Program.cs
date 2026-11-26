@@ -96,8 +96,18 @@ try
     app.MapHub<LiveHub>(RealtimeSetup.HubPath);
     app.MapHealthChecks("/health").AllowAnonymous();
 
-    // Корень сайта ведёт в Swagger: на демо-стенде достаточно открыть адрес сервера.
-    app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous().ExcludeFromDescription();
+    // Если в wwwroot лежит собранный фронтенд (в Docker-образе), сайт отдаёт его: любой адрес, кроме API, хаба,
+    // Swagger и /health, получает index.html, а дальше маршрутизирует сам фронтенд (React Router).
+    // Без фронтенда (локальная разработка API) корень ведёт в Swagger.
+    var spaIndex = Path.Combine(app.Environment.WebRootPath ?? "", "index.html");
+    if (File.Exists(spaIndex))
+    {
+        app.MapFallbackToFile("{*path:regex(^(?!api/|hubs/|swagger|health).*$)}", "index.html").AllowAnonymous();
+    }
+    else
+    {
+        app.MapGet("/", () => Results.Redirect("/swagger")).AllowAnonymous().ExcludeFromDescription();
+    }
 
     await app.RunAsync();
 }

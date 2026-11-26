@@ -15,3 +15,5 @@ tests/
 requests/
 .env
 CLAUDE.md
+frontend/node_modules/
+frontend/dist/

@@ -1,3 +1,7 @@
+# --- Фронтенд: зависимости и сборка ---
+frontend/node_modules/
+frontend/dist/
+
 # --- Private, local only (not published) ---
 /docs
 CLAUDE.md
