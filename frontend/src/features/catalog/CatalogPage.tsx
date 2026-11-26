@@ -24,6 +24,7 @@ export function CatalogPage() {
   const features = useFeatures().data ?? [];
   const locations = useLocations().data ?? [];
   const [filters, setFilters] = useState(false);
+  const [allSpaces, setAllSpaces] = useState(false);
 
   const term = params.get('q') ?? '';
   const debounced = useDebounced(term.trim());
@@ -108,7 +109,7 @@ export function CatalogPage() {
         <div className="pad" style={{ paddingBottom: 12 }}>
           <p className="rv-label" style={{ margin: '0 0 8px' }}>Коворкинги</p>
           <div className="nowlist rv-card spaces-row">
-            {spaces.map((s) => (
+            {[...spaces].sort((a, b) => (b.freeSeats ?? 0) - (a.freeSeats ?? 0)).slice(0, allSpaces ? undefined : SHOW_SPACES).map((s) => (
               <Link key={s.id} to={`/spaces/${s.id}`} className="nowr">
                 <span className="icirc" style={{ background: 'var(--accent-soft)', color: 'var(--accent-text)' }}><Monitor className="rv-ic" aria-hidden /></span>
                 <span className="nowr-b"><b className="ell">{s.name}</b><span className="rv-sm rv-muted ell">{s.location.name}{s.isQuiet ? ' · тихая зона' : ''} · {np(s.totalSeats, 'место', 'места', 'мест')}</span></span>
@@ -116,6 +117,11 @@ export function CatalogPage() {
               </Link>
             ))}
           </div>
+          {spaces.length > SHOW_SPACES && (
+            <button type="button" className="rv-btn rv-btn-ghost" style={{ marginTop: 6 }} onClick={() => setAllSpaces(!allSpaces)}>
+              {allSpaces ? 'Свернуть' : `Все коворкинги (${spaces.length})`}
+            </button>
+          )}
           <p className="rv-label" style={{ margin: '16px 0 0' }}>Помещения и оборудование</p>
         </div>
       )}
@@ -153,6 +159,8 @@ export function CatalogPage() {
 }
 
 const SHOW_CATEGORIES = 12;
+/** Коворкингов в каталоге без раскрытия — самые свободные сейчас. */
+const SHOW_SPACES = 5;
 
 function FiltersSheet(props: {
   kind: ResourceKind | null;

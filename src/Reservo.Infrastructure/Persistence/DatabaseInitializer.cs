@@ -31,8 +31,9 @@ public static class DatabaseInitializer
 
         await SeedAdminAsync(db, passwordHasher, timeProvider, seedOptions.Admin, logger, cancellationToken);
         await CatalogSeeder.SeedAsync(db, timeProvider, logger, cancellationToken);
-        await DemoSeeder.SeedAsync(
-            db, passwordHasher, provider.GetRequiredService<BookingPolicy>(), timeProvider, seedOptions, logger, cancellationToken);
+        var policy = provider.GetRequiredService<BookingPolicy>();
+        await DemoSeeder.SeedAsync(db, passwordHasher, policy, timeProvider, seedOptions, logger, cancellationToken);
+        await LargeCatalogSeeder.SeedAsync(db, policy, timeProvider, seedOptions, logger, cancellationToken);
     }
 
     private static async Task SeedAdminAsync(

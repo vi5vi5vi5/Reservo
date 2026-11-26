@@ -55,6 +55,8 @@ services:
       Jwt__Key: ${JWT_KEY:-}
       Seed__Admin__Password: ${ADMIN_PASSWORD:-}
       Seed__DemoUserPassword: ${DEMO_USER_PASSWORD:-}
+      # true — один раз добавить большой демо-каталог «на 10 кампусов и 10 офисов» с хаотичными бронями.
+      Seed__LargeCatalog: ${SEED_LARGE_CATALOG:-false}
       # Часовой пояс контейнера влияет только на время в логах: приложение хранит и сравнивает время в UTC.
       TZ: Europe/Moscow
     ports:

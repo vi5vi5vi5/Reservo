@@ -12,6 +12,12 @@ public sealed class SeedOptions
     /// На сервере задаётся переменной Seed__DemoUserPassword.
     /// </summary>
     public string? DemoUserPassword { get; init; }
+
+    /// <summary>
+    /// Большой демо-каталог «на 10 кампусов и 10 офисов» с хаотичными бронями (LargeCatalogSeeder).
+    /// Добавляется к обычному один раз. На сервере включается переменной Seed__LargeCatalog=true.
+    /// </summary>
+    public bool LargeCatalog { get; init; }
 }
 
 public sealed class AdminSeedOptions

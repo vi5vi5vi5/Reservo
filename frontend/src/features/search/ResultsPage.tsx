@@ -49,7 +49,10 @@ export function ResultsPage() {
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const total = list.data?.pages[0]?.totalCount ?? 0;
 
-  const shownSpaces = (spaces.data ?? []).filter((s) => !q.spaceId || s.id === q.spaceId);
+  // Самые свободные — сверху: коворкингов может быть несколько десятков.
+  const shownSpaces = (spaces.data ?? [])
+    .filter((s) => !q.spaceId || s.id === q.spaceId)
+    .sort((a, b) => (b.freeSeats ?? 0) - (a.freeSeats ?? 0));
   const pcOnly = q.what.type === 'seat' && q.what.pc;
   const seatsFree = shownSpaces.reduce((n, s) => n + s.seats.filter((x) => x.status === 'Free' && (!pcOnly || x.featureCodes.includes('computers'))).length, 0);
 

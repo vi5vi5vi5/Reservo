@@ -25,7 +25,7 @@ public sealed record HeatmapRowDto(string Type, int Id, string Name, string? Cat
 /// <param name="ActiveResources">Ресурсов в эксплуатации.</param>
 /// <param name="InactiveResources">Выведено из эксплуатации.</param>
 /// <param name="Hours">Часы тепловой карты по местному времени: 8 — это 08:00–09:00.</param>
-/// <param name="Heatmap">Загрузка ресурсов и коворкингов по часам.</param>
+/// <param name="Heatmap">Загрузка по часам: все коворкинги и ресурсы, у которых в этот день есть брони (самые загруженные — первыми, не больше 150).</param>
 public sealed record AdminStatsDto(
     DateOnly Date,
     string TimeZone,
@@ -60,6 +60,7 @@ public interface IAdminStatsService
 public sealed class AdminStatsService(IAppDbContext db, BookingPolicy policy, TimeProvider timeProvider) : IAdminStatsService
 {
     public const int UrgentHours = 3;
+    public const int MaxHeatmapRows = 150;
 
     public async Task<AdminStatsDto> GetAsync(AdminStatsQuery query, CancellationToken cancellationToken)
     {
@@ -129,14 +130,18 @@ public sealed class AdminStatsService(IAppDbContext db, BookingPolicy policy, Ti
 
         static int? Percent(int open, int busy) => open == 0 ? null : (int)Math.Round(100.0 * busy / open);
 
+        // Ресурсов могут быть тысячи, а пустая строка на карте ничего не сообщает. Поэтому строки — только у ресурсов,
+        // у которых в этот день есть брони, самые загруженные сверху и не больше MaxHeatmapRows. Коворкинги — всегда.
         var rows = active
-            .Where(r => r.SpaceId is null)
-            .OrderBy(r => r.CategoryName).ThenBy(r => r.Name)
+            .Where(r => r.SpaceId is null && busyByResource.Contains(r.Id))
             .Select(r => new HeatmapRowDto("resource", r.Id, r.Name, r.CategoryCode,
                 hours.Select(h => { var c = Cell(r.Id, r.OpenTime, r.CloseTime, h); return Percent(c.Open, c.Busy); }).ToList()))
+            .OrderByDescending(row => row.BusyPercent.Sum(p => p ?? 0))
+            .ThenBy(row => row.Name)
+            .Take(MaxHeatmapRows)
             .ToList();
 
-        rows.AddRange(active
+        rows.InsertRange(0, active
             .Where(r => r.SpaceId is not null)
             .GroupBy(r => (Id: r.SpaceId!.Value, Name: r.SpaceName!))
             .OrderBy(g => g.Key.Name)

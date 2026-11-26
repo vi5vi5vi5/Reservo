@@ -101,14 +101,12 @@ function Dashboard() {
 /** Тепловая карта: строки — ресурсы и коворкинги, столбцы — часы. Сотни строк прокручиваются, а поиск сужает список. */
 function Heatmap({ stats, nowHour }: { stats: NonNullable<ReturnType<typeof useStats>['data']>; nowHour: number }) {
   const [term, setTerm] = useState('');
-  const [busyOnly, setBusyOnly] = useState(stats.heatmap.length > 30);
   const t = term.trim().toLowerCase();
-  const rows = useMemo(() => stats.heatmap
-    .filter((r) => !t || r.name.toLowerCase().includes(t))
-    .filter((r) => !busyOnly || r.busyPercent.some((p) => (p ?? 0) > 0))
-    .sort((a, b) => (a.type === b.type ? 0 : a.type === 'space' ? -1 : 1)), [stats.heatmap, t, busyOnly]);
+  // Сервер уже прислал только то, что стоит показать: коворкинги и ресурсы с бронями, самые загруженные первыми.
+  const rows = useMemo(() => stats.heatmap.filter((r) => !t || r.name.toLowerCase().includes(t)), [stats.heatmap, t]);
+  const resources = stats.heatmap.filter((r) => r.type === 'resource').length;
   const level = (p: number | null) => (p == null ? null : p === 0 ? 0 : p <= 25 ? 1 : p <= 50 ? 2 : p <= 75 ? 3 : 4);
-  const LIMIT = 60;
+  const LIMIT = 80;
 
   return (
     <section className="sec" style={{ marginTop: 16 }}>
@@ -116,13 +114,12 @@ function Heatmap({ stats, nowHour }: { stats: NonNullable<ReturnType<typeof useS
         <div style={{ padding: '0 16px 12px', display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end', justifyContent: 'space-between' }}>
           <div>
             <h2 className="h2m">Загрузка сегодня</h2>
-            <p className="rv-sm rv-muted" style={{ margin: '2px 0 0' }}>{dayLabel(stats.date)} · чем темнее ячейка, тем плотнее час</p>
+            <p className="rv-sm rv-muted" style={{ margin: '2px 0 0' }}>
+              {dayLabel(stats.date)} · коворкинги и {np(resources, 'ресурс', 'ресурса', 'ресурсов')} с бронями из {stats.activeResources} · чем темнее ячейка, тем плотнее час
+            </p>
           </div>
           {stats.heatmap.length > 12 && (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ width: 240 }}><SearchField value={term} onChange={setTerm} placeholder="Ресурс" label="Найти ресурс на карте" /></div>
-              <Chip check on={busyOnly} onClick={() => setBusyOnly(!busyOnly)}>Только занятые</Chip>
-            </div>
+            <div style={{ width: 260, maxWidth: '100%' }}><SearchField value={term} onChange={setTerm} placeholder="Ресурс или коворкинг" label="Найти ресурс на карте" /></div>
           )}
         </div>
         <div className="heat-wrap">
@@ -136,7 +133,7 @@ function Heatmap({ stats, nowHour }: { stats: NonNullable<ReturnType<typeof useS
               })}
             </div>
           ))}
-          {rows.length === 0 && <p className="rv-sm rv-muted" style={{ margin: '8px 0' }}>{busyOnly ? 'Сегодня пока ничего не забронировано.' : 'Ничего не нашлось.'}</p>}
+          {rows.length === 0 && <p className="rv-sm rv-muted" style={{ margin: '8px 0' }}>{t ? 'Ничего не нашлось.' : 'В этот день пока ничего не забронировано.'}</p>}
         </div>
         {rows.length > LIMIT && <p className="rv-sm rv-muted" style={{ padding: '8px 16px 0', margin: 0 }}>Показаны первые {LIMIT} из {rows.length} — уточните поиск.</p>}
         <div className="rv-legend" style={{ padding: '10px 16px 0' }}>
